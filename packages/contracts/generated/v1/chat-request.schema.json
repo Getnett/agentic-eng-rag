@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rag-support:contracts:v1:chat-request.schema.json",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "$ref": "#/$defs/__schema0"
+    },
+    "widget_key": {
+      "$ref": "#/$defs/__schema1"
+    },
+    "visitor_session_id": {
+      "$ref": "#/$defs/__schema2"
+    },
+    "history": {
+      "$ref": "#/$defs/__schema3"
+    },
+    "question": {
+      "$ref": "#/$defs/__schema5"
+    }
+  },
+  "required": [
+    "contract_version",
+    "widget_key",
+    "visitor_session_id",
+    "history",
+    "question"
+  ],
+  "additionalProperties": false,
+  "title": "Chat request",
+  "$defs": {
+    "__schema0": {
+      "type": "string",
+      "const": "v1"
+    },
+    "__schema1": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "__schema2": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "__schema3": {
+      "maxItems": 12,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema4"
+      }
+    },
+    "__schema4": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": [
+            "user",
+            "assistant"
+          ]
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      },
+      "required": [
+        "role",
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "__schema5": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000
+    }
+  }
+}

@@ -1,7 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src"
+    "allowImportingTsExtensions": true,
+    "rootDir": ".",
+    "types": ["node", "vitest/globals"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["scripts/**/*.ts", "src/**/*.ts", "tests/**/*.ts"]
 }

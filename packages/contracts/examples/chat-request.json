@@ -1,0 +1,16 @@
+{
+  "contract_version": "v1",
+  "widget_key": "public_widget_key_123456",
+  "visitor_session_id": "visitor_session_123",
+  "history": [
+    {
+      "role": "user",
+      "content": "How do I reset the device?"
+    },
+    {
+      "role": "assistant",
+      "content": "Which model do you have?"
+    }
+  ],
+  "question": "How do I reset model A?"
+}

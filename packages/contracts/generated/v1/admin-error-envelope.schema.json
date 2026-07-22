@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rag-support:contracts:v1:admin-error-envelope.schema.json",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "$ref": "#/$defs/__schema0"
+    },
+    "request_id": {
+      "$ref": "#/$defs/__schema1"
+    },
+    "error": {
+      "$ref": "#/$defs/__schema2"
+    }
+  },
+  "required": [
+    "contract_version",
+    "request_id",
+    "error"
+  ],
+  "additionalProperties": false,
+  "title": "Authenticated admin error envelope",
+  "$defs": {
+    "__schema0": {
+      "type": "string",
+      "const": "v1"
+    },
+    "__schema1": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+      "title": "Request ID"
+    },
+    "__schema2": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "details": {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema3"
+          }
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable",
+        "details"
+      ],
+      "additionalProperties": false
+    },
+    "__schema3": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "required": [
+        "field",
+        "reason"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

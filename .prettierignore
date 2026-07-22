@@ -5,3 +5,4 @@ dist/
 coverage/
 pnpm-lock.yaml
 uv.lock
+packages/contracts/generated/
