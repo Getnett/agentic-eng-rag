@@ -1,0 +1,7 @@
+docs/assets/
+node_modules/
+.venv/
+dist/
+coverage/
+pnpm-lock.yaml
+uv.lock

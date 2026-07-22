@@ -1,0 +1,108 @@
+min_version = "2026.7.11"
+monorepo_root = true
+
+[monorepo]
+config_roots = ["apps/*", "packages/*", "infra/*"]
+
+[tools]
+node = "24.18.0"
+pnpm = "10.34.5"
+python = "3.13.14"
+terraform = "1.15.8"
+uv = "0.11.30"
+
+[env]
+_.path = ["{{config_root}}/node_modules/.bin"]
+UV_PROJECT_ENVIRONMENT = "{{config_root}}/.venv"
+
+[tasks."bootstrap:node"]
+description = "Install locked TypeScript workspace dependencies"
+run = "pnpm install --frozen-lockfile"
+
+[tasks."bootstrap:python"]
+description = "Install locked Python workspace dependencies"
+run = "uv sync --all-packages --frozen"
+
+[tasks.bootstrap]
+description = "Install all locked workspace dependencies"
+depends = ["bootstrap:node", "bootstrap:python"]
+
+[tasks."format:typescript"]
+description = "Format TypeScript workspace and repository configuration files"
+run = "pnpm run format"
+
+[tasks."format:python"]
+description = "Format Python workspaces"
+run = "uv run ruff format apps/api apps/worker"
+
+[tasks."format:terraform"]
+description = "Format Terraform files"
+run = "terraform fmt -recursive infra/terraform"
+
+[tasks.format]
+description = "Format every workspace"
+depends = ["format:typescript", "format:python", "format:terraform"]
+
+[tasks."format:check:typescript"]
+description = "Check TypeScript workspace and repository file formatting"
+run = "pnpm run format:check"
+
+[tasks."format:check:python"]
+description = "Check Python workspace formatting"
+run = "uv run ruff format --check apps/api apps/worker"
+
+[tasks."format:check:terraform"]
+description = "Check Terraform formatting"
+run = "terraform fmt -check -recursive infra/terraform"
+
+[tasks."format:check"]
+description = "Check formatting in every workspace"
+depends = [
+  "format:check:typescript",
+  "format:check:python",
+  "format:check:terraform",
+]
+
+[tasks."lint:typescript"]
+description = "Lint TypeScript workspaces"
+run = "pnpm run lint"
+
+[tasks."lint:python"]
+description = "Lint Python workspaces"
+run = "uv run ruff check apps/api apps/worker"
+
+[tasks.lint]
+description = "Lint every workspace"
+depends = ["lint:typescript", "lint:python"]
+
+[tasks."typecheck:typescript"]
+description = "Type-check TypeScript workspaces"
+run = "pnpm run typecheck"
+
+[tasks."typecheck:python"]
+description = "Type-check Python workspaces"
+run = "uv run mypy apps/api/src apps/worker/src"
+
+[tasks.typecheck]
+description = "Type-check every workspace"
+depends = ["typecheck:typescript", "typecheck:python"]
+
+[tasks."test:typescript"]
+description = "Run TypeScript workspace test discovery"
+run = "pnpm run test"
+
+[tasks."test:python"]
+description = "Run Python workspace tests"
+run = "uv run pytest apps/api/tests apps/worker/tests"
+
+[tasks."test:terraform"]
+description = "Validate the Terraform workspace"
+run = "terraform -chdir=infra/terraform validate"
+
+[tasks.test]
+description = "Run tests and validation for every workspace"
+depends = ["test:typescript", "test:python", "test:terraform"]
+
+[tasks.check]
+description = "Run all repository quality gates"
+depends = ["format:check", "lint", "typecheck", "test"]

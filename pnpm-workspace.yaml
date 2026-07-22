@@ -1,0 +1,7 @@
+packages:
+  - apps/admin
+  - packages/*
+
+catalogMode: strict
+cleanupUnusedCatalogs: true
+linkWorkspacePackages: true

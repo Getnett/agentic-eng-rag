@@ -1,0 +1,35 @@
+[project]
+name = "rag-support-workspace"
+version = "0.0.0"
+requires-python = "==3.13.*"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "mypy==2.3.0",
+  "pytest==9.1.1",
+  "ruff==0.15.22",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["apps/api", "apps/worker"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unreachable = true
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib --strict-config --strict-markers"
+pythonpath = ["apps/api/src", "apps/worker/src"]
+testpaths = ["apps/api/tests", "apps/worker/tests"]

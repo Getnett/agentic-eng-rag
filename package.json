@@ -1,0 +1,25 @@
+{
+  "name": "rag-support-chatbot",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": "24.18.0",
+    "pnpm": "10.34.5"
+  },
+  "scripts": {
+    "format": "prettier --write \"apps/admin/**/*.{ts,json}\" \"packages/**/*.{ts,json}\" \"*.{json,yaml,yml,md,mjs}\" \".github/**/*.yml\" \"infra/**/*.md\"",
+    "format:check": "prettier --check \"apps/admin/**/*.{ts,json}\" \"packages/**/*.{ts,json}\" \"*.{json,yaml,yml,md,mjs}\" \".github/**/*.yml\" \"infra/**/*.md\"",
+    "lint": "eslint apps/admin/src packages/*/src",
+    "typecheck": "pnpm --recursive --if-present run typecheck",
+    "test": "pnpm --recursive --if-present run test"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.7.0",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.65.0",
+    "vitest": "4.1.10"
+  }
+}

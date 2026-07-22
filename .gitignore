@@ -1,0 +1,30 @@
+# Operating system and editor files
+.DS_Store
+.idea/
+.vscode/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# JavaScript
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Python
+.venv/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.py[cod]
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
