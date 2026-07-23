@@ -1,0 +1,6 @@
+project_id = "replace-with-development-project-id"
+region     = "us-central1"
+
+# Keep safeguards enabled for ordinary plans and applies.
+deletion_protection      = true
+allow_destructive_cleanup = false
