@@ -1,10 +1,25 @@
 {
   "name": "@rag-support/contracts",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./generated/v1/*": "./generated/v1/*"
+  },
   "scripts": {
-    "test": "vitest run --passWithNoTests",
+    "generate": "tsx scripts/generate-json-schema.ts",
+    "generate:check": "tsx scripts/generate-json-schema.ts --check",
+    "test": "pnpm run generate:check && vitest run",
     "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "tsx": "4.23.1"
   }
 }
