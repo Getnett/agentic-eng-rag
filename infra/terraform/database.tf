@@ -6,13 +6,18 @@ resource "google_sql_database_instance" "primary" {
   deletion_protection = var.deletion_protection
 
   settings {
-    tier              = var.database_tier
-    edition           = "ENTERPRISE"
-    availability_type = "ZONAL"
-    disk_type         = "PD_SSD"
-    disk_size         = 10
-    disk_autoresize   = true
-    user_labels       = local.labels
+    tier                        = var.database_tier
+    edition                     = "ENTERPRISE"
+    availability_type           = "ZONAL"
+    deletion_protection_enabled = var.deletion_protection
+    disk_type                   = "PD_SSD"
+    disk_size                   = 10
+    disk_autoresize             = true
+    user_labels                 = local.labels
+
+    final_backup_config {
+      enabled = false
+    }
 
     backup_configuration {
       enabled                        = true

@@ -1,3 +1,3 @@
 project_id        = "replace-with-development-project-id"
-region            = "us-central1"
+region            = "europe-west1"
 state_bucket_name = "replace-with-globally-unique-rag-dev-tfstate"

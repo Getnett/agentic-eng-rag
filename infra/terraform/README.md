@@ -118,7 +118,12 @@ Manual verification:
 
 Development infrastructure is disposable, but cleanup is intentional:
 
-- `deletion_protection` defaults to `true` for Cloud SQL and Cloud Run.
+- `deletion_protection` defaults to `true` for Cloud SQL and Cloud Run. For
+  Cloud SQL, it enables both Terraform-side deletion protection and GCP's
+  instance-level console/API protection.
+- The disposable development Cloud SQL instance does not retain a final backup
+  after an intentional deletion; routine backups and point-in-time recovery
+  remain enabled while the instance exists.
 - `allow_destructive_cleanup` defaults to `false`, so Terraform will not empty
   the raw-source bucket during destroy.
 - API enablement remains in place after destroy to avoid disrupting resources

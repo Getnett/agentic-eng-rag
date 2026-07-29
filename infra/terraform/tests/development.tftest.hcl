@@ -28,6 +28,16 @@ run "development_plan" {
   }
 
   assert {
+    condition     = google_sql_database_instance.primary.deletion_protection && google_sql_database_instance.primary.settings[0].deletion_protection_enabled
+    error_message = "Cloud SQL must enable both Terraform and GCP API deletion protection."
+  }
+
+  assert {
+    condition     = google_sql_database_instance.primary.settings[0].final_backup_config[0].enabled == false
+    error_message = "The disposable development database must not retain a final backup after intentional deletion."
+  }
+
+  assert {
     condition     = google_service_account.runtime["api"].account_id != google_service_account.runtime["worker"].account_id
     error_message = "API and worker must use separate service accounts."
   }
