@@ -92,7 +92,7 @@ locals {
   ])
 
   github_federation_subjects = {
-    deployer  = "repo:${var.github_repository}:environment:${var.github_deployment_environment}"
+    deployer  = "repo:${var.github_repository}:environment:development"
     publisher = "repo:${var.github_repository}:ref:refs/heads/main"
   }
 

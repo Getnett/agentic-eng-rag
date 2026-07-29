@@ -72,7 +72,7 @@ run "development_plan" {
   assert {
     condition = (
       local.github_federation_subjects["publisher"] == "repo:${var.github_repository}:ref:refs/heads/main" &&
-      local.github_federation_subjects["deployer"] == "repo:${var.github_repository}:environment:${var.github_deployment_environment}"
+      local.github_federation_subjects["deployer"] == "repo:${var.github_repository}:environment:development"
     )
     error_message = "Publisher and deployer impersonation must be restricted to main and the approved environment subjects."
   }

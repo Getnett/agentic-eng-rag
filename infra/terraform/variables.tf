@@ -122,17 +122,6 @@ variable "github_repository_owner_id" {
   }
 }
 
-variable "github_deployment_environment" {
-  description = "GitHub environment whose approval gate protects development deployments."
-  type        = string
-  default     = "development"
-
-  validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{1,62}$", var.github_deployment_environment))
-    error_message = "github_deployment_environment must be a lowercase GitHub environment name."
-  }
-}
-
 variable "deletion_protection" {
   description = "Protect Cloud SQL and Cloud Run from accidental deletion."
   type        = bool
