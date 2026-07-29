@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import os
+import tomllib
+from pathlib import Path
 
 import pytest
 from rag_api.migrations import MigrationConfigurationError, MigrationSettings
 
 CLOUD_VARIABLES = ("INSTANCE_CONNECTION_NAME", "DB_NAME", "DB_USER")
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_local_database_url_selects_local_mode(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -64,3 +67,11 @@ def test_environment_is_not_modified_by_settings(monkeypatch: pytest.MonkeyPatch
     MigrationSettings.from_environment()
 
     assert dict(os.environ) == before
+
+
+def test_root_migration_tasks_expose_api_source_package() -> None:
+    with (REPOSITORY_ROOT / "mise.toml").open("rb") as config_file:
+        tasks = tomllib.load(config_file)["tasks"]
+
+    assert tasks["db:migrate"]["env"]["PYTHONPATH"] == "apps/api/src"
+    assert tasks["db:downgrade"]["env"]["PYTHONPATH"] == "apps/api/src"

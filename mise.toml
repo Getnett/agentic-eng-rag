@@ -97,10 +97,12 @@ run = "uv run pytest apps/api/tests apps/worker/tests"
 
 [tasks."db:migrate"]
 description = "Upgrade the configured PostgreSQL database to the migration head"
+env = { PYTHONPATH = "apps/api/src" }
 run = "uv run python -m rag_api.migrations upgrade"
 
 [tasks."db:downgrade"]
 description = "Downgrade the configured PostgreSQL database to the migration base"
+env = { PYTHONPATH = "apps/api/src" }
 run = "uv run python -m rag_api.migrations downgrade"
 
 [tasks."test:migrations"]

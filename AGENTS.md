@@ -36,10 +36,18 @@ workflow below:
    verification, and `mise run check`.
 5. Commit with `POR-N` in the message, push the branch, and open a pull request
    against `main`.
-6. Comment on the Linear issue with the implementation summary, commit and pull
-   request links, verification evidence, and any discovered follow-ups.
-7. Move the issue to Done only when every acceptance criterion passes. Otherwise,
-   leave it active and record the blocker. Never begin another issue automatically.
+6. Wait for required CI and automated review feedback. Inspect every unresolved
+   review thread, address all actionable comments that remain within the issue
+   scope, rerun the affected checks and `mise run check`, push follow-up commits,
+   and reply to and resolve the addressed threads with verification evidence.
+   Surface ambiguous, conflicting, or out-of-scope feedback instead of guessing or
+   starting another issue.
+7. Comment on the Linear issue with the implementation summary, commit and pull
+   request links, verification evidence, review-feedback disposition, and any
+   discovered follow-ups.
+8. Move the issue to Done only when every acceptance criterion passes, required CI
+   is green, and no unresolved actionable review feedback remains. Otherwise, leave
+   it active and record the blocker. Never begin another issue automatically.
 
 ## Workspace boundaries
 
