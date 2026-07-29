@@ -15,6 +15,11 @@ resource "google_sql_database_instance" "primary" {
     disk_autoresize             = true
     user_labels                 = local.labels
 
+    database_flags {
+      name  = "cloudsql.iam_authentication"
+      value = "on"
+    }
+
     final_backup_config {
       enabled = false
     }
@@ -54,4 +59,17 @@ resource "google_sql_database" "application" {
   name     = var.database_name
   project  = var.project_id
   instance = google_sql_database_instance.primary.name
+}
+
+resource "google_sql_user" "migration" {
+  name = trimsuffix(
+    google_service_account.runtime["migration"].email,
+    ".gserviceaccount.com",
+  )
+  project        = var.project_id
+  instance       = google_sql_database_instance.primary.name
+  type           = "CLOUD_IAM_SERVICE_ACCOUNT"
+  database_roles = ["cloudsqlsuperuser"]
+
+  depends_on = [google_project_iam_member.runtime]
 }

@@ -1,0 +1,28 @@
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+
+FROM ghcr.io/astral-sh/uv:0.11.30@sha256:93b61e21202b1dab861092748e46bbd6e0e41dd84f59b9174efd2353186e1b47 AS uv
+FROM python:3.13.14-slim-bookworm@sha256:9d7f287598e1a5a978c015ee176d8216435aaf335ed69ac3c38dd1bbb10e8d64
+
+COPY --from=uv /uv /uvx /bin/
+
+WORKDIR /workspace
+
+COPY pyproject.toml uv.lock ./
+COPY apps/api/pyproject.toml apps/api/pyproject.toml
+COPY apps/worker/pyproject.toml apps/worker/pyproject.toml
+
+RUN uv sync --frozen --no-dev --package rag-support-api --no-install-workspace
+
+COPY apps/api/alembic.ini apps/api/alembic.ini
+COPY apps/api/migrations apps/api/migrations
+COPY apps/api/src apps/api/src
+
+ENV PATH="/workspace/.venv/bin:${PATH}" \
+    PYTHONPATH="/workspace/apps/api/src" \
+    PYTHONDONTWRITEBYTECODE="1" \
+    PYTHONUNBUFFERED="1"
+
+USER 65532:65532
+
+ENTRYPOINT ["python", "-m", "rag_api.migrations"]
+CMD ["upgrade"]

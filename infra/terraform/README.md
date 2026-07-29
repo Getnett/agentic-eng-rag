@@ -1,20 +1,23 @@
 # Terraform development environment
 
-This directory owns the reproducible GCP development environment for POR-32. It
-creates infrastructure only: the Cloud Run services use Google's public hello
-container as an authenticated smoke image until the application deployment
-issue replaces it. No production resources or application images are managed
-here.
+This directory owns the reproducible GCP development environment. The API,
+admin, and worker services continue to use Google's public hello container until
+the application deployment issue replaces it. POR-33 adds only the private
+repository and one-shot job needed to run database migrations; no production
+resources are managed here.
 
 ## What is created
 
 - a custom VPC, serverless subnet, and private service connection;
 - one private-IP PostgreSQL Cloud SQL instance and application database;
+- Cloud SQL IAM database authentication and a dedicated migration database user;
+- one private Artifact Registry Docker repository;
 - one private, versioned raw-source Cloud Storage bucket;
 - API, admin, and worker Cloud Run v2 services with direct VPC egress;
+- an optional, digest-pinned Cloud Run migration job with direct VPC egress;
 - one Cloud Tasks queue;
 - empty Secret Manager containers (never secret versions or payloads);
-- separate API, admin, and worker runtime service accounts;
+- separate API, admin, worker, and migration runtime service accounts;
 - narrowly scoped project IAM bindings for runtime logging, monitoring, and
   Cloud SQL, plus resource-scoped Storage, Secret Manager, and Cloud Tasks
   access; and
@@ -97,6 +100,11 @@ terraform -chdir=infra/terraform apply dev.tfplan
 terraform -chdir=infra/terraform output
 ```
 
+The first POR-33 apply leaves `migration_image` unset. It creates the private
+image repository, enables Cloud SQL IAM authentication, and creates the
+passwordless migration identity. The Cloud Run job is created only after an
+immutable migration image is available.
+
 Manual verification:
 
 1. Confirm the three standard labels on Cloud Run, Cloud SQL, Storage, and
@@ -112,13 +120,81 @@ Manual verification:
    and Cloud Tasks access is bound directly to the respective resource.
 6. Confirm Secret Manager contains metadata only and Terraform created no secret
    versions.
-7. Re-run `plan`; expect no changes.
+7. Confirm the migration service account has Cloud SQL Client and Cloud SQL
+   Instance User, but no Secret Manager access.
+8. Re-run `plan`; expect no changes.
+
+## 4. Build and configure the migration job
+
+Authenticate Docker to the regional registry:
+
+```sh
+gcloud auth configure-docker europe-west1-docker.pkg.dev
+terraform -chdir=infra/terraform output -raw artifact_registry_repository_url
+```
+
+Use the output as `REPOSITORY`, build from a clean POR-33 commit, and push a tag
+containing that commit:
+
+```sh
+docker build \
+  --platform linux/amd64 \
+  --file apps/api/Dockerfile.migrations \
+  --tag REPOSITORY/migrations:POR-33-COMMIT \
+  .
+docker push REPOSITORY/migrations:POR-33-COMMIT
+gcloud artifacts docker images describe \
+  REPOSITORY/migrations:POR-33-COMMIT \
+  --format='value(image_summary.digest)'
+```
+
+Set the ignored development variable to the repository plus returned digest:
+
+```hcl
+migration_image = "REPOSITORY/migrations@sha256:RETURNED_DIGEST"
+```
+
+Review and apply the second phase:
+
+```sh
+terraform -chdir=infra/terraform plan \
+  -var-file=environments/dev/dev.tfvars \
+  -out=migration-job.tfplan
+terraform -chdir=infra/terraform apply migration-job.tfplan
+```
+
+Terraform rejects tags or images outside its managed repository. The job uses a
+dedicated IAM database user and receives no password or Secret Manager value.
+
+## 5. Run and verify migrations
+
+Execute the job twice:
+
+```sh
+gcloud run jobs execute rag-dev-migrate --region=europe-west1 --wait
+gcloud run jobs execute rag-dev-migrate --region=europe-west1 --wait
+```
+
+Each successful execution logs only the Alembic revision, pgvector extension
+version, and a harmless vector-cast probe. Both runs must report
+`0001_enable_pgvector`; the second run must apply no revision. Inspect job logs
+or Cloud SQL Studio and confirm:
+
+```sql
+SELECT version_num FROM rag_app.alembic_version;
+SELECT extversion FROM pg_extension WHERE extname = 'vector';
+SELECT '[1,2,3]'::vector;
+```
+
+Finally, confirm the Cloud SQL instance is `RUNNABLE`, the latest two job
+executions succeeded, and another Terraform plan reports no changes.
 
 ## Cleanup and destroy policy
 
 Development infrastructure is disposable, but cleanup is intentional:
 
-- `deletion_protection` defaults to `true` for Cloud SQL and Cloud Run. For
+- `deletion_protection` defaults to `true` for Cloud SQL and Cloud Run services
+  and jobs. For
   Cloud SQL, it enables both Terraform-side deletion protection and GCP's
   instance-level console/API protection.
 - The disposable development Cloud SQL instance does not retain a final backup

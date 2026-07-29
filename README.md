@@ -8,6 +8,8 @@ A fresh checkout requires:
 
 - Git.
 - [mise](https://mise.jdx.dev/getting-started.html), which installs the pinned Node.js, pnpm, Python, uv, and Terraform versions.
+- Docker Desktop or another Docker-compatible daemon. Migration integration tests
+  use a pinned PostgreSQL 16 image with pgvector.
 
 No globally installed language runtimes or package managers are used by repository commands.
 
@@ -35,6 +37,38 @@ Both dependency managers use committed lockfiles. `bootstrap` fails rather than 
 | `mise run typecheck`    | Run TypeScript and Python type checkers.               |
 | `mise run test`         | Run workspace tests and Terraform validation.          |
 | `mise run check`        | Run every non-mutating quality gate used by CI.        |
+| `mise run db:migrate`   | Upgrade the configured database to the migration head. |
+| `mise run db:downgrade` | Downgrade the configured database to the base.         |
+
+## Database migrations
+
+Migrations are owned by the API workspace but run only as an explicit one-shot
+command. API startup must never invoke them.
+
+For local development, start any PostgreSQL 16 database with pgvector and provide
+a SQLAlchemy URL:
+
+```sh
+export DATABASE_URL='postgresql+pg8000://postgres:password@127.0.0.1:5432/support_rag'
+mise run db:migrate
+mise run db:migrate
+```
+
+The second command is intentionally a no-op. To verify the complete lifecycle
+against the repository's pinned, disposable Docker image:
+
+```sh
+mise run test:migrations
+```
+
+The test starts and removes its own container. The migration runner never logs
+`DATABASE_URL`; it reports only the applied revision, installed vector version,
+and a harmless vector-cast probe.
+
+Cloud execution uses `INSTANCE_CONNECTION_NAME`, `DB_NAME`, and `DB_USER`.
+Terraform supplies these to a passwordless IAM-authenticated Cloud Run job. See
+[`infra/terraform/README.md`](infra/terraform/README.md) for the two-phase image
+and job deployment.
 
 ## Workspace layout
 

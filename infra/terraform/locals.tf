@@ -9,6 +9,7 @@ locals {
   }
 
   required_services = toset([
+    "artifactregistry.googleapis.com",
     "cloudresourcemanager.googleapis.com",
     "compute.googleapis.com",
     "iam.googleapis.com",
@@ -31,6 +32,10 @@ locals {
       display_name = "RAG API development runtime"
       description  = "Runtime identity for the development public and admin API."
     }
+    migration = {
+      display_name = "RAG database migration runtime"
+      description  = "Passwordless one-shot identity for development database migrations."
+    }
     worker = {
       display_name = "RAG worker development runtime"
       description  = "Runtime identity for development ingestion workers."
@@ -44,6 +49,12 @@ locals {
     ])
     api = toset([
       "roles/cloudsql.client",
+      "roles/logging.logWriter",
+      "roles/monitoring.metricWriter",
+    ])
+    migration = toset([
+      "roles/cloudsql.client",
+      "roles/cloudsql.instanceUser",
       "roles/logging.logWriter",
       "roles/monitoring.metricWriter",
     ])

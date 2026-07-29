@@ -8,6 +8,11 @@ output "region" {
   value       = var.region
 }
 
+output "artifact_registry_repository_url" {
+  description = "Docker repository URL for immutable development images."
+  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.application.repository_id}"
+}
+
 output "raw_sources_bucket_name" {
   description = "Private raw-source bucket identifier."
   value       = google_storage_bucket.raw_sources.name
@@ -29,6 +34,11 @@ output "cloud_run_service_uris" {
 output "cloud_tasks_queue_name" {
   description = "Cloud Tasks ingestion queue identifier."
   value       = google_cloud_tasks_queue.ingestion.name
+}
+
+output "migration_job_name" {
+  description = "One-shot migration job name, or null until an immutable image is configured."
+  value       = try(google_cloud_run_v2_job.migration[0].name, null)
 }
 
 output "runtime_service_account_emails" {
