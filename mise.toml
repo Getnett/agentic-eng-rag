@@ -95,6 +95,29 @@ run = "pnpm run test"
 description = "Run Python workspace tests"
 run = "uv run pytest apps/api/tests apps/worker/tests"
 
+[tasks."db:migrate"]
+description = "Upgrade the configured PostgreSQL database to the migration head"
+run = "uv run python -m rag_api.migrations upgrade"
+
+[tasks."db:downgrade"]
+description = "Downgrade the configured PostgreSQL database to the migration base"
+run = "uv run python -m rag_api.migrations downgrade"
+
+[tasks."test:migrations"]
+description = "Test migration upgrade, idempotency, pgvector, and downgrade using Docker"
+run = "uv run pytest apps/api/tests/test_migrations_integration.py"
+
+[tasks."test:migration-image"]
+description = "Build the reproducible one-shot migration container"
+run = """
+docker build \
+  --platform linux/amd64 \
+  --file apps/api/Dockerfile.migrations \
+  --tag rag-migrations:test \
+  .
+docker image inspect rag-migrations:test | grep -q '"User": "65532:65532"'
+"""
+
 [tasks."test:terraform:init:root"]
 description = "Initialize the development Terraform root without remote state"
 run = "terraform -chdir=infra/terraform init -backend=false -input=false"
@@ -139,7 +162,12 @@ depends = [
 
 [tasks.test]
 description = "Run tests and validation for every workspace"
-depends = ["test:typescript", "test:python", "test:terraform"]
+depends = [
+  "test:typescript",
+  "test:python",
+  "test:migration-image",
+  "test:terraform",
+]
 
 [tasks.check]
 description = "Run all repository quality gates"

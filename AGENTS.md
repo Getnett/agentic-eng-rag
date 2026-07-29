@@ -21,6 +21,26 @@ When these sources conflict, stop and surface the conflict instead of silently c
 - Do not add product behavior, infrastructure resources, migrations, or dependencies unless the issue requires them.
 - Consult current official documentation before configuring a framework, SDK, API, CLI, or cloud service.
 
+## Standard POR issue workflow
+
+A request in the form `implement POR-N` explicitly authorizes the complete issue
+workflow below:
+
+1. Read the Linear issue, its relations and comments, the relevant source-of-truth
+   documents, and every applicable `AGENTS.md`.
+2. Confirm all blockers are complete. Restate the acceptance criteria and give a
+   short implementation plan before editing.
+3. Fetch and fast-forward `main`, then create the exact branch name `POR-N` before
+   making changes. Stop if unrelated local changes make that unsafe.
+4. Implement only that issue. Run focused automated tests, the documented manual
+   verification, and `mise run check`.
+5. Commit with `POR-N` in the message, push the branch, and open a pull request
+   against `main`.
+6. Comment on the Linear issue with the implementation summary, commit and pull
+   request links, verification evidence, and any discovered follow-ups.
+7. Move the issue to Done only when every acceptance criterion passes. Otherwise,
+   leave it active and record the blocker. Never begin another issue automatically.
+
 ## Workspace boundaries
 
 - `apps/api`: FastAPI public chat and authenticated admin APIs.
@@ -48,6 +68,8 @@ mise run check
 - Do not bypass, weaken, or mark a failing quality gate as optional.
 - Add automated tests for changed behavior. Keep tests deterministic and independent of production credentials.
 - Record repeatable manual verification when behavior cannot be fully automated.
+- Docker-backed integration tests require a running Docker-compatible daemon as
+  documented in the root README.
 
 ## Language conventions
 
@@ -64,4 +86,7 @@ mise run check
 
 ## External systems
 
-Update Linear or other external systems only when the user explicitly requests it. When requested, include concise implementation and verification evidence and report any discovered follow-up without starting it automatically.
+Update Linear or other external systems only when the user explicitly requests it,
+including through the standard `implement POR-N` workflow above. When requested,
+include concise implementation and verification evidence and report any discovered
+follow-up without starting it automatically.

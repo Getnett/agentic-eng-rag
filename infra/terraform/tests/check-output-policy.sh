@@ -6,9 +6,11 @@ outputs_file="$terraform_dir/outputs.tf"
 
 expected_outputs=$(
   printf '%s\n' \
+    artifact_registry_repository_url \
     cloud_run_service_uris \
     cloud_sql_instance_connection_name \
     cloud_tasks_queue_name \
+    migration_job_name \
     project_id \
     raw_sources_bucket_name \
     region \

@@ -28,6 +28,14 @@ run "development_plan" {
   }
 
   assert {
+    condition = length([
+      for flag in google_sql_database_instance.primary.settings[0].database_flags :
+      flag if flag.name == "cloudsql.iam_authentication" && flag.value == "on"
+    ]) == 1
+    error_message = "Cloud SQL must enable IAM database authentication."
+  }
+
+  assert {
     condition     = google_sql_database_instance.primary.deletion_protection && google_sql_database_instance.primary.settings[0].deletion_protection_enabled
     error_message = "Cloud SQL must enable both Terraform and GCP API deletion protection."
   }
@@ -40,6 +48,24 @@ run "development_plan" {
   assert {
     condition     = google_service_account.runtime["api"].account_id != google_service_account.runtime["worker"].account_id
     error_message = "API and worker must use separate service accounts."
+  }
+
+  assert {
+    condition = (
+      google_service_account.runtime["migration"].account_id != google_service_account.runtime["api"].account_id &&
+      contains(local.runtime_project_roles["migration"], "roles/cloudsql.client") &&
+      contains(local.runtime_project_roles["migration"], "roles/cloudsql.instanceUser")
+    )
+    error_message = "Migrations must use a dedicated passwordless Cloud SQL identity."
+  }
+
+  assert {
+    condition = (
+      google_sql_user.migration.type == "CLOUD_IAM_SERVICE_ACCOUNT" &&
+      google_sql_user.migration.database_roles == tolist(["cloudsqlsuperuser"]) &&
+      length("${local.name_prefix}-migration@${var.project_id}.iam") <= 63
+    )
+    error_message = "The migration database user must use IAM, fit PostgreSQL's identifier limit, and have only the extension-management role."
   }
 
   assert {
@@ -95,6 +121,12 @@ run "development_plan" {
         ])
       ],
       [
+        alltrue([
+          for key, value in local.labels :
+          lookup(google_artifact_registry_repository.application.labels, key, null) == value
+        ])
+      ],
+      [
         for secret in google_secret_manager_secret.application :
         alltrue([for key, value in local.labels : lookup(secret.labels, key, null) == value])
       ],
@@ -105,5 +137,34 @@ run "development_plan" {
   assert {
     condition     = length(google_secret_manager_secret.application) == length(var.secret_names)
     error_message = "Terraform should create secret containers without secret payload resources."
+  }
+}
+
+run "migration_job_plan" {
+  command = plan
+
+  variables {
+    migration_image = "europe-west1-docker.pkg.dev/rag-dev-example/rag-dev-images/migrations@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+
+  assert {
+    condition = (
+      google_cloud_run_v2_job.migration[0].template[0].task_count == 1 &&
+      google_cloud_run_v2_job.migration[0].template[0].template[0].max_retries == 0
+    )
+    error_message = "The migration job must execute once without automatic retries."
+  }
+
+  assert {
+    condition     = google_cloud_run_v2_job.migration[0].template[0].template[0].vpc_access[0].egress == "PRIVATE_RANGES_ONLY"
+    error_message = "The migration job must use private VPC egress."
+  }
+
+  assert {
+    condition = startswith(
+      google_cloud_run_v2_job.migration[0].template[0].template[0].containers[0].image,
+      "europe-west1-docker.pkg.dev/rag-dev-example/rag-dev-images/migrations@sha256:",
+    )
+    error_message = "The migration job must use an immutable image from the managed repository."
   }
 }

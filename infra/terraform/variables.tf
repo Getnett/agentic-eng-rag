@@ -71,6 +71,24 @@ variable "cloud_run_smoke_image" {
   }
 }
 
+variable "migration_image" {
+  description = "Optional immutable Artifact Registry digest for the one-shot migration job."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition = (
+      var.migration_image == null ||
+      can(regex(
+        "^[-a-z0-9.]+/[-a-z0-9_/]+@sha256:[0-9a-f]{64}$",
+        var.migration_image,
+      ))
+    )
+    error_message = "migration_image must be null or an immutable image reference ending in @sha256:<64 lowercase hex characters>."
+  }
+}
+
 variable "deletion_protection" {
   description = "Protect Cloud SQL and Cloud Run from accidental deletion."
   type        = bool
