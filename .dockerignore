@@ -10,6 +10,7 @@ coverage
 **/.ruff_cache
 .env
 .env.*
+gha-creds-*.json
 infra/terraform/.terraform
 infra/terraform/bootstrap/terraform.tfvars
 infra/terraform/environments/*/backend.hcl

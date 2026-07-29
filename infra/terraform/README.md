@@ -1,9 +1,9 @@
 # Terraform development environment
 
-This directory owns the reproducible GCP development environment. The API,
-admin, and worker services continue to use Google's public hello container until
-the application deployment issue replaces it. POR-33 adds only the private
-repository and one-shot job needed to run database migrations; no production
+This directory owns the reproducible GCP development environment. Terraform
+bootstraps API, admin, and worker services with Google's public hello container;
+the deployment pipeline then owns their image revisions. POR-34 adds the
+health-only API delivery path and keyless GitHub identities. No production
 resources are managed here.
 
 ## What is created
@@ -11,13 +11,16 @@ resources are managed here.
 - a custom VPC, serverless subnet, and private service connection;
 - one private-IP PostgreSQL Cloud SQL instance and application database;
 - Cloud SQL IAM database authentication and a dedicated migration database user;
-- one private Artifact Registry Docker repository;
+- one private Artifact Registry Docker repository with immutable tags;
 - one private, versioned raw-source Cloud Storage bucket;
-- API, admin, and worker Cloud Run v2 services with direct VPC egress;
+- API, admin, and worker Cloud Run v2 services with direct VPC egress; only the
+  health-only API is publicly callable in M0;
 - an optional, digest-pinned Cloud Run migration job with direct VPC egress;
 - one Cloud Tasks queue;
 - empty Secret Manager containers (never secret versions or payloads);
 - separate API, admin, worker, and migration runtime service accounts;
+- separate keyless GitHub image-publisher and development-deployer service
+  accounts;
 - narrowly scoped project IAM bindings for runtime logging, monitoring, and
   Cloud SQL, plus resource-scoped Storage, Secret Manager, and Cloud Tasks
   access; and
@@ -122,7 +125,10 @@ Manual verification:
    versions.
 7. Confirm the migration service account has Cloud SQL Client and Cloud SQL
    Instance User, but no Secret Manager access.
-8. Re-run `plan`; expect no changes.
+8. Confirm the CI publisher can only write the managed Artifact Registry
+   repository, while the deployer can read it, update Cloud Run, and act only as
+   the API and migration runtime identities.
+9. Re-run `plan`; expect no changes.
 
 ## 4. Build and configure the migration job
 
@@ -188,6 +194,65 @@ SELECT '[1,2,3]'::vector;
 
 Finally, confirm the Cloud SQL instance is `RUNNABLE`, the latest two job
 executions succeeded, and another Terraform plan reports no changes.
+
+## 6. Configure keyless GitHub delivery
+
+Terraform creates a GitHub OIDC provider restricted to the repository's
+immutable numeric repository and owner IDs. It creates two separate identities:
+
+- `publisher` accepts only the exact `main` branch OIDC subject and can write
+  images only to the managed Artifact Registry repository.
+- `deployer` accepts only the `development` environment OIDC subject, can read
+  that repository and update Cloud Run, and may act only as the API and
+  migration runtime service accounts.
+
+Apply the ordinary development plan, then obtain the non-secret values:
+
+```sh
+terraform -chdir=infra/terraform output -raw github_workload_identity_provider
+terraform -chdir=infra/terraform output -json automation_service_account_emails
+terraform -chdir=infra/terraform output -raw artifact_registry_repository_url
+```
+
+Create these GitHub Actions repository variables:
+
+| Variable                         | Value                                         |
+| -------------------------------- | --------------------------------------------- |
+| `GCP_PROJECT_ID`                 | Terraform `project_id` output                 |
+| `GCP_REGION`                     | Terraform `region` output                     |
+| `GCP_ARTIFACT_REPOSITORY`        | Repository ID only, normally `rag-dev-images` |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Full provider output                          |
+| `GCP_PUBLISHER_SERVICE_ACCOUNT`  | `publisher` automation account email          |
+| `GCP_DEPLOYER_SERVICE_ACCOUNT`   | `deployer` automation account email           |
+
+Do not create a JSON service-account key or store cloud credentials in GitHub
+secrets.
+
+In GitHub repository settings, create the `development` environment and require
+the repository owner as a reviewer. Keep "prevent self-review" disabled while
+there is only one operator, otherwise no deployment can be approved. Restrict
+deployment branches to `main`. Also require the `Quality / Repository checks`
+status check before merging to `main`.
+
+The main-branch publication workflow first runs `mise run check`, then builds
+and pushes `api:FULL_COMMIT_SHA` and `migrations:FULL_COMMIT_SHA`. Artifact
+Registry rejects tag reuse, and the workflow retains a manifest containing the
+resolved `sha256` digests.
+
+To deploy:
+
+1. Open **Actions → Deploy development → Run workflow**.
+2. Enter the full 40-character SHA from a successful main publication.
+3. Review and approve the waiting `development` job.
+4. Confirm the job runs the migration before updating the API.
+5. Download the retained deployment artifact and compare its API digest and
+   revision with Cloud Run.
+6. Open the recorded `/healthz` URL and confirm `status=ok` and
+   `source_revision` equals the approved SHA.
+
+Terraform continues to own Cloud Run configuration and deletion protection.
+The delivery workflows own only service/job image revisions, which Terraform
+intentionally ignores so a post-deployment plan remains stable.
 
 ## Cleanup and destroy policy
 

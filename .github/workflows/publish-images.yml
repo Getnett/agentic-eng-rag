@@ -1,0 +1,141 @@
+name: Publish immutable images
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-images-${{ github.sha }}
+  cancel-in-progress: false
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
+  ARTIFACT_REPOSITORY: ${{ vars.GCP_ARTIFACT_REPOSITORY }}
+
+jobs:
+  verify:
+    name: Verify source
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install pinned tools
+        uses: jdx/mise-action@v3
+        with:
+          cache: true
+
+      - name: Install locked dependencies
+        run: mise run bootstrap
+
+      - name: Run all quality gates
+        run: mise run check
+
+  publish:
+    name: Build and publish
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate deployment variables
+        env:
+          WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          PUBLISHER_SERVICE_ACCOUNT: ${{ vars.GCP_PUBLISHER_SERVICE_ACCOUNT }}
+        run: |
+          test -n "${GCP_PROJECT_ID}"
+          test -n "${GCP_REGION}"
+          test -n "${ARTIFACT_REPOSITORY}"
+          test -n "${WORKLOAD_IDENTITY_PROVIDER}"
+          test -n "${PUBLISHER_SERVICE_ACCOUNT}"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_PUBLISHER_SERVICE_ACCOUNT }}
+
+      - name: Install Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Artifact Registry authentication
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push commit images
+        id: images
+        run: |
+          set -euo pipefail
+          image_repository="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}"
+          api_tag="${image_repository}/api:${GITHUB_SHA}"
+          migration_tag="${image_repository}/migrations:${GITHUB_SHA}"
+
+          docker build \
+            --file apps/api/Dockerfile \
+            --build-arg "APP_REVISION=${GITHUB_SHA}" \
+            --tag "${api_tag}" \
+            .
+          docker push "${api_tag}"
+
+          docker build \
+            --file apps/api/Dockerfile.migrations \
+            --tag "${migration_tag}" \
+            .
+          docker push "${migration_tag}"
+
+          api_digest="$(
+            gcloud artifacts docker images describe "${api_tag}" \
+              --format='value(image_summary.digest)'
+          )"
+          migration_digest="$(
+            gcloud artifacts docker images describe "${migration_tag}" \
+              --format='value(image_summary.digest)'
+          )"
+
+          printf '%s' "${api_digest}" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          printf '%s' "${migration_digest}" | grep -Eq '^sha256:[0-9a-f]{64}$'
+
+          api_image="${image_repository}/api@${api_digest}"
+          migration_image="${image_repository}/migrations@${migration_digest}"
+          printf 'api_image=%s\n' "${api_image}" >>"${GITHUB_OUTPUT}"
+          printf 'migration_image=%s\n' "${migration_image}" >>"${GITHUB_OUTPUT}"
+
+          jq -n \
+            --arg source_revision "${GITHUB_SHA}" \
+            --arg api_image "${api_image}" \
+            --arg migration_image "${migration_image}" \
+            --arg workflow_run "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            '{
+              source_revision: $source_revision,
+              api_image: $api_image,
+              migration_image: $migration_image,
+              workflow_run: $workflow_run
+            }' >image-manifest.json
+
+          {
+            echo "### Immutable images"
+            echo
+            echo "- API: \`${api_image}\`"
+            echo "- Migrations: \`${migration_image}\`"
+          } >>"${GITHUB_STEP_SUMMARY}"
+
+      - name: Retain image manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-manifest-${{ github.sha }}
+          path: image-manifest.json
+          if-no-files-found: error
+          retention-days: 90

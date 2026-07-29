@@ -52,6 +52,55 @@ run "development_plan" {
 
   assert {
     condition = (
+      google_artifact_registry_repository.application.docker_config[0].immutable_tags &&
+      google_artifact_registry_repository_iam_member.automation["publisher"].role == "roles/artifactregistry.writer" &&
+      google_artifact_registry_repository_iam_member.automation["deployer"].role == "roles/artifactregistry.reader"
+    )
+    error_message = "Published images must use immutable tags and narrowly scoped repository access."
+  }
+
+  assert {
+    condition = (
+      google_iam_workload_identity_pool_provider.github.oidc[0].issuer_uri == "https://token.actions.githubusercontent.com" &&
+      google_iam_workload_identity_pool_provider.github.attribute_mapping["google.subject"] == "assertion.sub" &&
+      strcontains(google_iam_workload_identity_pool_provider.github.attribute_condition, var.github_repository_id) &&
+      strcontains(google_iam_workload_identity_pool_provider.github.attribute_condition, var.github_repository_owner_id)
+    )
+    error_message = "GitHub OIDC trust must use the official issuer and immutable repository and owner IDs."
+  }
+
+  assert {
+    condition = (
+      local.github_federation_subjects["publisher"] == "repo:${var.github_repository}:ref:refs/heads/main" &&
+      local.github_federation_subjects["deployer"] == "repo:${var.github_repository}:environment:${var.github_deployment_environment}"
+    )
+    error_message = "Publisher and deployer impersonation must be restricted to main and the approved environment subjects."
+  }
+
+  assert {
+    condition = (
+      google_project_iam_member.automation_deployer.role == "roles/run.developer" &&
+      toset(keys(google_service_account_iam_member.deployer_act_as)) == toset(["api", "migration"]) &&
+      alltrue([
+        for binding in google_service_account_iam_member.deployer_act_as :
+        binding.role == "roles/iam.serviceAccountUser"
+      ])
+    )
+    error_message = "The deployment identity may update Cloud Run and act only as the API and migration runtimes."
+  }
+
+  assert {
+    condition = (
+      google_cloud_run_v2_service.runtime["api"].ingress == "INGRESS_TRAFFIC_ALL" &&
+      google_cloud_run_v2_service.runtime["api"].invoker_iam_disabled &&
+      !google_cloud_run_v2_service.runtime["admin"].invoker_iam_disabled &&
+      !google_cloud_run_v2_service.runtime["worker"].invoker_iam_disabled
+    )
+    error_message = "Only the health-only API service may accept unauthenticated public traffic."
+  }
+
+  assert {
+    condition = (
       google_service_account.runtime["migration"].account_id != google_service_account.runtime["api"].account_id &&
       contains(local.runtime_project_roles["migration"], "roles/cloudsql.client") &&
       contains(local.runtime_project_roles["migration"], "roles/cloudsql.instanceUser")

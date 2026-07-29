@@ -21,7 +21,7 @@ run = "pnpm install --frozen-lockfile"
 
 [tasks."bootstrap:python"]
 description = "Install locked Python workspace dependencies"
-run = "uv sync --all-packages --frozen"
+run = "uv sync --all-packages --all-extras --frozen"
 
 [tasks.bootstrap]
 description = "Install all locked workspace dependencies"
@@ -120,6 +120,39 @@ docker build \
 docker image inspect rag-migrations:test | grep -q '"User": "65532:65532"'
 """
 
+[tasks."test:api-image"]
+description = "Build and smoke test the health-only API container"
+run = """
+docker build \
+  --file apps/api/Dockerfile \
+  --tag rag-api-health:test \
+  .
+docker image inspect rag-api-health:test | grep -q '"User": "65532:65532"'
+
+container_id="$(
+  docker run \
+    --detach \
+    --rm \
+    --publish 127.0.0.1::8080 \
+    rag-api-health:test
+)"
+trap 'docker rm --force "$container_id" >/dev/null 2>&1 || true' EXIT
+port="$(docker port "$container_id" 8080/tcp | sed 's/.*://')"
+
+for attempt in $(seq 1 20); do
+  if response="$(curl --fail --silent --show-error "http://127.0.0.1:${port}/healthz" 2>/dev/null)" &&
+    printf '%s' "$response" |
+      uv run python -c 'import json, sys; data=json.load(sys.stdin); assert data["status"] == "ok" and data["source_revision"] == "local"'; then
+    exit 0
+  fi
+  if [ "$attempt" -eq 20 ]; then
+    docker logs "$container_id"
+    exit 1
+  fi
+  sleep 1
+done
+"""
+
 [tasks."test:terraform:init:root"]
 description = "Initialize the development Terraform root without remote state"
 run = "terraform -chdir=infra/terraform init -backend=false -input=false"
@@ -167,6 +200,7 @@ description = "Run tests and validation for every workspace"
 depends = [
   "test:typescript",
   "test:python",
+  "test:api-image",
   "test:migration-image",
   "test:terraform",
 ]

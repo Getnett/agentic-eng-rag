@@ -59,6 +59,9 @@ resource "google_cloud_run_v2_job" "migration" {
   }
 
   lifecycle {
+    # Terraform creates the job; the deployment pipeline advances its image digest.
+    ignore_changes = [template[0].template[0].containers[0].image]
+
     precondition {
       condition = startswith(
         coalesce(var.migration_image, ""),
