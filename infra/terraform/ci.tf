@@ -67,10 +67,22 @@ resource "google_artifact_registry_repository_iam_member" "automation" {
   member     = "serviceAccount:${google_service_account.automation[each.key].email}"
 }
 
-resource "google_project_iam_member" "automation_deployer" {
-  project = var.project_id
-  role    = "roles/run.developer"
-  member  = "serviceAccount:${google_service_account.automation["deployer"].email}"
+resource "google_cloud_run_v2_service_iam_member" "automation_deployer" {
+  project  = var.project_id
+  location = google_cloud_run_v2_service.runtime["api"].location
+  name     = google_cloud_run_v2_service.runtime["api"].name
+  role     = "roles/run.developer"
+  member   = "serviceAccount:${google_service_account.automation["deployer"].email}"
+}
+
+resource "google_cloud_run_v2_job_iam_member" "automation_deployer" {
+  count = var.migration_image == null ? 0 : 1
+
+  project  = var.project_id
+  location = google_cloud_run_v2_job.migration[0].location
+  name     = google_cloud_run_v2_job.migration[0].name
+  role     = "roles/run.developer"
+  member   = "serviceAccount:${google_service_account.automation["deployer"].email}"
 }
 
 resource "google_service_account_iam_member" "deployer_act_as" {

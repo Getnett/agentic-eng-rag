@@ -79,14 +79,15 @@ run "development_plan" {
 
   assert {
     condition = (
-      google_project_iam_member.automation_deployer.role == "roles/run.developer" &&
+      google_cloud_run_v2_service_iam_member.automation_deployer.role == "roles/run.developer" &&
+      google_cloud_run_v2_service_iam_member.automation_deployer.name == google_cloud_run_v2_service.runtime["api"].name &&
       toset(keys(google_service_account_iam_member.deployer_act_as)) == toset(["api", "migration"]) &&
       alltrue([
         for binding in google_service_account_iam_member.deployer_act_as :
         binding.role == "roles/iam.serviceAccountUser"
       ])
     )
-    error_message = "The deployment identity may update Cloud Run and act only as the API and migration runtimes."
+    error_message = "The deployment identity may update only the API and act only as the API and migration runtimes."
   }
 
   assert {
@@ -194,6 +195,14 @@ run "migration_job_plan" {
 
   variables {
     migration_image = "europe-west1-docker.pkg.dev/rag-dev-example/rag-dev-images/migrations@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+
+  assert {
+    condition = (
+      google_cloud_run_v2_job_iam_member.automation_deployer[0].role == "roles/run.developer" &&
+      google_cloud_run_v2_job_iam_member.automation_deployer[0].name == google_cloud_run_v2_job.migration[0].name
+    )
+    error_message = "The deployment identity may update only the managed migration job."
   }
 
   assert {
