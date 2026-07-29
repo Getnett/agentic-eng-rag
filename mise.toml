@@ -95,9 +95,47 @@ run = "pnpm run test"
 description = "Run Python workspace tests"
 run = "uv run pytest apps/api/tests apps/worker/tests"
 
-[tasks."test:terraform"]
-description = "Validate the Terraform workspace"
+[tasks."test:terraform:init:root"]
+description = "Initialize the development Terraform root without remote state"
+run = "terraform -chdir=infra/terraform init -backend=false -input=false"
+
+[tasks."test:terraform:init:bootstrap"]
+description = "Initialize the remote-state bootstrap Terraform root"
+run = "terraform -chdir=infra/terraform/bootstrap init -backend=false -input=false"
+
+[tasks."test:terraform:validate:root"]
+description = "Validate the development Terraform root"
+depends = ["test:terraform:init:root"]
 run = "terraform -chdir=infra/terraform validate"
+
+[tasks."test:terraform:validate:bootstrap"]
+description = "Validate the remote-state bootstrap Terraform root"
+depends = ["test:terraform:init:bootstrap"]
+run = "terraform -chdir=infra/terraform/bootstrap validate"
+
+[tasks."test:terraform:policies"]
+description = "Run Terraform development-environment policy assertions"
+depends = ["test:terraform:init:root"]
+run = "terraform -chdir=infra/terraform test"
+
+[tasks."test:terraform:policies:bootstrap"]
+description = "Run Terraform remote-state policy assertions"
+depends = ["test:terraform:init:bootstrap"]
+run = "terraform -chdir=infra/terraform/bootstrap test"
+
+[tasks."test:terraform:outputs"]
+description = "Verify that Terraform exposes only approved non-secret outputs"
+run = "infra/terraform/tests/check-output-policy.sh"
+
+[tasks."test:terraform"]
+description = "Validate and policy-test both Terraform roots"
+depends = [
+  "test:terraform:validate:root",
+  "test:terraform:validate:bootstrap",
+  "test:terraform:policies",
+  "test:terraform:policies:bootstrap",
+  "test:terraform:outputs",
+]
 
 [tasks.test]
 description = "Run tests and validation for every workspace"
