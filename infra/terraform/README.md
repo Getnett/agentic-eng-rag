@@ -247,7 +247,7 @@ To deploy:
 4. Confirm the job runs the migration before updating the API.
 5. Download the retained deployment artifact and compare its API digest and
    revision with Cloud Run.
-6. Open the recorded `/healthz` URL and confirm `status=ok` and
+6. Open the recorded `/health` URL and confirm `status=ok` and
    `source_revision` equals the approved SHA.
 
 Terraform continues to own Cloud Run configuration and deletion protection.

@@ -140,7 +140,7 @@ trap 'docker rm --force "$container_id" >/dev/null 2>&1 || true' EXIT
 port="$(docker port "$container_id" 8080/tcp | sed 's/.*://')"
 
 for attempt in $(seq 1 20); do
-  if response="$(curl --fail --silent --show-error "http://127.0.0.1:${port}/healthz" 2>/dev/null)" &&
+  if response="$(curl --fail --silent --show-error "http://127.0.0.1:${port}/health" 2>/dev/null)" &&
     printf '%s' "$response" |
       uv run python -c 'import json, sys; data=json.load(sys.stdin); assert data["status"] == "ok" and data["source_revision"] == "local"'; then
     exit 0

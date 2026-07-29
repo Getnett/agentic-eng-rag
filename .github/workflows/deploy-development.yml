@@ -135,7 +135,7 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in $(seq 1 20); do
-            if response="$(curl --fail --silent --show-error "${SERVICE_URL}/healthz")" &&
+            if response="$(curl --fail --silent --show-error "${SERVICE_URL}/health")" &&
               jq -e \
                 --arg source_revision "${SOURCE_SHA}" \
                 '.status == "ok" and
@@ -195,7 +195,7 @@ jobs:
             echo "- API: \`${API_IMAGE}\`"
             echo "- Migration execution: \`${MIGRATION_EXECUTION}\`"
             echo "- Cloud Run revision: \`${revision}\`"
-            echo "- Health: ${SERVICE_URL}/healthz"
+            echo "- Health: ${SERVICE_URL}/health"
           } >>"${GITHUB_STEP_SUMMARY}"
 
       - name: Retain deployment evidence

@@ -26,7 +26,7 @@ app = FastAPI(
 )
 
 
-@app.get("/healthz", response_model=HealthResponse)
+@app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     """Report process health and traceable revision identifiers."""
     return HealthResponse(

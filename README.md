@@ -80,7 +80,7 @@ immutable Artifact Registry repository, and retains a digest manifest.
 Development deployment is a separate, manually triggered workflow protected by
 the GitHub `development` environment. It accepts a full commit SHA from `main`,
 resolves both immutable digests, runs the migration job, deploys the health-only
-API revision, calls `/healthz`, and retains the resulting revision, image, and
+API revision, calls `/health`, and retains the resulting revision, image, and
 smoke-test metadata for 90 days.
 
 GitHub authenticates to GCP through short-lived Workload Identity Federation
