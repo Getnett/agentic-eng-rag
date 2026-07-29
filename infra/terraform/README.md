@@ -131,10 +131,17 @@ Development infrastructure is disposable, but cleanup is intentional:
 - The remote-state bucket is managed separately and must be destroyed last.
 
 To retire an environment, first retain any required documents, logs, and
-database backups. Then set both safeguards explicitly, review the destroy plan,
-and destroy the main root:
+database backups. Disable both safeguards with a normal apply so Terraform
+persists the transition before attempting to delete the protected resources:
 
 ```sh
+terraform -chdir=infra/terraform plan \
+  -var-file=environments/dev/dev.tfvars \
+  -var='deletion_protection=false' \
+  -var='allow_destructive_cleanup=true' \
+  -out=prepare-destroy.tfplan
+terraform -chdir=infra/terraform apply prepare-destroy.tfplan
+
 terraform -chdir=infra/terraform plan \
   -destroy \
   -var-file=environments/dev/dev.tfvars \
@@ -143,6 +150,10 @@ terraform -chdir=infra/terraform plan \
   -out=destroy.tfplan
 terraform -chdir=infra/terraform apply destroy.tfplan
 ```
+
+The preparatory apply does not delete resources, but it removes their deletion
+safeguards. If cleanup is canceled, immediately reapply the ordinary
+development variables to restore protection.
 
 After confirming the main state is empty, wait for the state bucket's 30-day
 retention window, remove retained object versions, and destroy `bootstrap/`.
