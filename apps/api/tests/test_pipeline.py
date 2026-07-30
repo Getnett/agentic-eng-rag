@@ -51,8 +51,23 @@ def test_main_publication_builds_images_after_verification() -> None:
     publish_job = workflow["jobs"]["publish"]
     assert publish_job["permissions"] == {"contents": "read", "id-token": "write"}
     names = step_names(publish_job)
-    assert names.index("Authenticate to Google Cloud") < names.index("Build and push commit images")
+    assert names.index("Authenticate to Google Cloud") < names.index(
+        "Publish or reuse commit images"
+    )
     assert "Retain image manifest" in names
+
+    publish_step = next(
+        step for step in publish_job["steps"] if step["name"] == "Publish or reuse commit images"
+    )
+    publish_source = publish_step["run"]
+    assert 'if api_digest="$(describe_image_digest "${api_tag}" 2>/dev/null)"; then' in (
+        publish_source
+    )
+    assert (
+        'if migration_digest="$(describe_image_digest "${migration_tag}" 2>/dev/null)"; then'
+        in publish_source
+    )
+    assert publish_source.count("verify_image_digest") == 5
 
 
 def test_development_deployment_is_approval_gated_and_smoke_tested() -> None:

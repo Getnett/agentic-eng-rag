@@ -75,7 +75,7 @@ jobs:
       - name: Configure Artifact Registry authentication
         run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
 
-      - name: Build and push commit images
+      - name: Publish or reuse commit images
         id: images
         run: |
           set -euo pipefail
@@ -83,30 +83,47 @@ jobs:
           api_tag="${image_repository}/api:${GITHUB_SHA}"
           migration_tag="${image_repository}/migrations:${GITHUB_SHA}"
 
-          docker build \
-            --file apps/api/Dockerfile \
-            --build-arg "APP_REVISION=${GITHUB_SHA}" \
-            --tag "${api_tag}" \
-            .
-          docker push "${api_tag}"
-
-          docker build \
-            --file apps/api/Dockerfile.migrations \
-            --tag "${migration_tag}" \
-            .
-          docker push "${migration_tag}"
-
-          api_digest="$(
-            gcloud artifacts docker images describe "${api_tag}" \
+          describe_image_digest() {
+            gcloud artifacts docker images describe "$1" \
               --format='value(image_summary.digest)'
-          )"
-          migration_digest="$(
-            gcloud artifacts docker images describe "${migration_tag}" \
-              --format='value(image_summary.digest)'
-          )"
+          }
 
-          printf '%s' "${api_digest}" | grep -Eq '^sha256:[0-9a-f]{64}$'
-          printf '%s' "${migration_digest}" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          verify_image_digest() {
+            image_name="$1"
+            image_digest="$2"
+            printf '%s' "${image_digest}" | grep -Eq '^sha256:[0-9a-f]{64}$'
+            gcloud artifacts docker images describe \
+              "${image_name}@${image_digest}" \
+              --format='value(image_summary.digest)' |
+              grep -Fxq "${image_digest}"
+          }
+
+          if api_digest="$(describe_image_digest "${api_tag}" 2>/dev/null)"; then
+            verify_image_digest "${image_repository}/api" "${api_digest}"
+            echo "Reusing existing immutable API image ${api_tag}."
+          else
+            docker build \
+              --file apps/api/Dockerfile \
+              --build-arg "APP_REVISION=${GITHUB_SHA}" \
+              --tag "${api_tag}" \
+              .
+            docker push "${api_tag}"
+            api_digest="$(describe_image_digest "${api_tag}")"
+            verify_image_digest "${image_repository}/api" "${api_digest}"
+          fi
+
+          if migration_digest="$(describe_image_digest "${migration_tag}" 2>/dev/null)"; then
+            verify_image_digest "${image_repository}/migrations" "${migration_digest}"
+            echo "Reusing existing immutable migration image ${migration_tag}."
+          else
+            docker build \
+              --file apps/api/Dockerfile.migrations \
+              --tag "${migration_tag}" \
+              .
+            docker push "${migration_tag}"
+            migration_digest="$(describe_image_digest "${migration_tag}")"
+            verify_image_digest "${image_repository}/migrations" "${migration_digest}"
+          fi
 
           api_image="${image_repository}/api@${api_digest}"
           migration_image="${image_repository}/migrations@${migration_digest}"
