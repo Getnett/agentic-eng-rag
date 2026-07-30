@@ -50,6 +50,7 @@ REQUIRED_CONSTRAINTS = {
     "ck_source_document_tags_nonempty",
     "ck_source_document_title",
     "ck_source_version_content_hash",
+    "ck_source_version_error_matches_status",
     "ck_source_version_metadata_object",
     "ck_source_version_number_positive",
     "fk_chunk_parent_same_version",

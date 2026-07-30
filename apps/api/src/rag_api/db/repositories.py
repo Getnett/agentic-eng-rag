@@ -203,6 +203,10 @@ class SourceRepository:
             raise IllegalSourceVersionTransition(
                 f"Source version cannot transition from {version.status.value} to {target.value}."
             )
+        if target is SourceVersionStatus.FAILED and (error is None or not error.strip()):
+            raise ValueError("A failed source version requires a nonblank error.")
+        if target is not SourceVersionStatus.FAILED and error is not None:
+            raise ValueError("Only a failed source version can store an error.")
         version.status = target
         version.error = error
         await self._session.flush()

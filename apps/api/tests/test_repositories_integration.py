@@ -259,6 +259,11 @@ async def test_invalid_status_and_illegal_transitions_are_rejected(
                 version.id,
                 SourceVersionStatus.INDEXED,
             )
+        with pytest.raises(ValueError, match="requires a nonblank error"):
+            await source_repository.transition_version(
+                version.id,
+                SourceVersionStatus.FAILED,
+            )
 
     async with session_factory() as session:
         with pytest.raises(DBAPIError):
@@ -273,6 +278,15 @@ async def test_invalid_status_and_illegal_transitions_are_rejected(
         await session.rollback()
 
     async with session_factory() as session:
+        with pytest.raises(IntegrityError):
+            await session.execute(
+                text("UPDATE rag_app.source_version SET status = 'failed' WHERE id = :version_id"),
+                {"version_id": version.id},
+            )
+            await session.flush()
+        await session.rollback()
+
+    async with session_factory() as session:
         with pytest.raises(DBAPIError, match="illegal source version transition"):
             await session.execute(
                 text("UPDATE rag_app.source_version SET status = 'indexed' WHERE id = :version_id"),
@@ -280,6 +294,14 @@ async def test_invalid_status_and_illegal_transitions_are_rejected(
             )
             await session.flush()
         await session.rollback()
+
+    async with session_factory.begin() as session:
+        failed = await SourceRepository(session).transition_version(
+            version.id,
+            SourceVersionStatus.FAILED,
+            error="Source download failed.",
+        )
+        assert failed.error == "Source download failed."
 
 
 @pytest.mark.anyio

@@ -235,8 +235,9 @@ class SourceVersion(TimestampMixin, Base):
             name="ck_source_version_raw_object_key",
         ),
         CheckConstraint(
-            "error IS NULL OR length(btrim(error)) > 0",
-            name="ck_source_version_error",
+            "(status = 'failed' AND error IS NOT NULL AND length(btrim(error)) > 0) "
+            "OR (status <> 'failed' AND error IS NULL)",
+            name="ck_source_version_error_matches_status",
         ),
         CheckConstraint(
             "jsonb_typeof(metadata) = 'object'",
