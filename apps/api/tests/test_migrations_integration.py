@@ -61,7 +61,7 @@ def postgres_url() -> Iterator[str]:
                 )
                 connection.close()
                 break
-            except pg8000.dbapi.InterfaceError:
+            except (pg8000.dbapi.Error, OSError):
                 if time.monotonic() >= deadline:
                     logs = _docker("logs", container_id)
                     raise RuntimeError(f"PostgreSQL did not become ready:\n{logs}") from None
