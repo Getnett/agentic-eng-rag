@@ -401,6 +401,54 @@ async def test_only_one_indexed_version_per_document(async_engine: AsyncEngine) 
 
 
 @pytest.mark.anyio
+async def test_queued_url_version_requires_hash_before_indexing(
+    async_engine: AsyncEngine,
+) -> None:
+    session_factory = async_sessionmaker(async_engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        repository = SourceRepository(session)
+        document = await repository.create_document(
+            source_type=SourceType.URL,
+            source_location="https://support.example/fetched-later",
+            title="Fetched later",
+        )
+        version = await repository.create_version(
+            document_id=document.id,
+            version_number=1,
+        )
+        assert version.content_hash is None
+
+    async with session_factory.begin() as session:
+        await SourceRepository(session).transition_version(
+            version.id,
+            SourceVersionStatus.PROCESSING,
+        )
+
+    async with session_factory() as session:
+        with pytest.raises(IntegrityError):
+            await session.execute(
+                text("UPDATE rag_app.source_version SET status = 'indexed' WHERE id = :version_id"),
+                {"version_id": version.id},
+            )
+            await session.flush()
+        await session.rollback()
+
+    async with session_factory.begin() as session:
+        repository = SourceRepository(session)
+        with pytest.raises(ValueError, match="requires a content hash"):
+            await repository.transition_version(
+                version.id,
+                SourceVersionStatus.INDEXED,
+            )
+        indexed = await repository.transition_version(
+            version.id,
+            SourceVersionStatus.INDEXED,
+            content_hash="fetched-content-sha256",
+        )
+        assert indexed.content_hash == "fetched-content-sha256"
+
+
+@pytest.mark.anyio
 async def test_active_version_must_belong_to_its_document(
     async_engine: AsyncEngine,
 ) -> None:

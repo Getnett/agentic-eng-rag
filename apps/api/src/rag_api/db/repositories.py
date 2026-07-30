@@ -139,7 +139,7 @@ class SourceRepository:
         *,
         document_id: uuid.UUID,
         version_number: int,
-        content_hash: str,
+        content_hash: str | None = None,
         raw_object_key: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> SourceVersion:
@@ -193,6 +193,7 @@ class SourceRepository:
         target: SourceVersionStatus,
         *,
         error: str | None = None,
+        content_hash: str | None = None,
     ) -> SourceVersion:
         version = await self._session.scalar(
             select(SourceVersion).where(SourceVersion.id == version_id).with_for_update()
@@ -207,6 +208,12 @@ class SourceRepository:
             raise ValueError("A failed source version requires a nonblank error.")
         if target is not SourceVersionStatus.FAILED and error is not None:
             raise ValueError("Only a failed source version can store an error.")
+        if content_hash is not None:
+            if not content_hash.strip():
+                raise ValueError("A source content hash must be nonblank.")
+            version.content_hash = content_hash
+        if target is SourceVersionStatus.INDEXED and version.content_hash is None:
+            raise ValueError("An indexed source version requires a content hash.")
         version.status = target
         version.error = error
         await self._session.flush()

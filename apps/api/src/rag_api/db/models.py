@@ -227,8 +227,12 @@ class SourceVersion(TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint("version_number > 0", name="ck_source_version_number_positive"),
         CheckConstraint(
-            "length(btrim(content_hash)) > 0",
+            "content_hash IS NULL OR length(btrim(content_hash)) > 0",
             name="ck_source_version_content_hash",
+        ),
+        CheckConstraint(
+            "status NOT IN ('indexed', 'superseded') OR content_hash IS NOT NULL",
+            name="ck_source_version_indexed_hash",
         ),
         CheckConstraint(
             "raw_object_key IS NULL OR length(btrim(raw_object_key)) > 0",
@@ -281,7 +285,7 @@ class SourceVersion(TimestampMixin, Base):
         server_default=sa.text("'queued'"),
         nullable=False,
     )
-    content_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     raw_object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(
