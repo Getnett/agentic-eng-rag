@@ -91,9 +91,11 @@ locals {
     ]
   ])
 
+  github_repository_parts         = split("/", var.github_repository)
+  github_immutable_subject_prefix = "repo:${local.github_repository_parts[0]}@${var.github_repository_owner_id}/${local.github_repository_parts[1]}@${var.github_repository_id}"
   github_federation_subjects = {
-    deployer  = "repo:${var.github_repository}:environment:development"
-    publisher = "repo:${var.github_repository}:ref:refs/heads/main"
+    deployer  = "${local.github_immutable_subject_prefix}:environment:development"
+    publisher = "${local.github_immutable_subject_prefix}:ref:refs/heads/main"
   }
 
   cloud_run_services = {

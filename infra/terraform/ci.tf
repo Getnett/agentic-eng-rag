@@ -16,6 +16,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
 
   attribute_mapping = {
     "google.subject"                = "assertion.sub"
+    "attribute.delivery_role"       = "assertion.sub == '${local.github_federation_subjects["publisher"]}' ? 'publisher' : assertion.sub == '${local.github_federation_subjects["deployer"]}' ? 'deployer' : 'denied'"
     "attribute.repository"          = "assertion.repository"
     "attribute.repository_id"       = "assertion.repository_id"
     "attribute.repository_owner_id" = "assertion.repository_owner_id"
@@ -25,6 +26,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   attribute_condition = join(" && ", [
     "assertion.repository_id == '${var.github_repository_id}'",
     "assertion.repository_owner_id == '${var.github_repository_owner_id}'",
+    "(assertion.sub == '${local.github_federation_subjects["publisher"]}' || assertion.sub == '${local.github_federation_subjects["deployer"]}')",
   ])
 
   oidc {
@@ -51,7 +53,7 @@ resource "google_service_account_iam_member" "github_federation" {
 
   service_account_id = google_service_account.automation[each.key].name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principal://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/subject/${each.value}"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.delivery_role/${each.key}"
 }
 
 resource "google_artifact_registry_repository_iam_member" "automation" {

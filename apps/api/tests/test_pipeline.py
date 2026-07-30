@@ -52,8 +52,15 @@ def test_main_publication_builds_images_after_verification() -> None:
     assert publish_job["permissions"] == {"contents": "read", "id-token": "write"}
     names = step_names(publish_job)
     assert names.index("Authenticate to Google Cloud") < names.index(
+        "Verify Google Cloud impersonation"
+    )
+    assert names.index("Verify Google Cloud impersonation") < names.index(
         "Publish or reuse commit images"
     )
+    impersonation_step = next(
+        step for step in publish_job["steps"] if step["name"] == "Verify Google Cloud impersonation"
+    )
+    assert impersonation_step["run"] == "gcloud auth print-access-token >/dev/null"
     assert "Retain image manifest" in names
 
     publish_step = next(
@@ -61,7 +68,7 @@ def test_main_publication_builds_images_after_verification() -> None:
     )
     publish_source = publish_step["run"]
     assert "for attempt in 1 2 3" in publish_source
-    assert "grep -Fq 'NOT_FOUND:'" in publish_source
+    assert "grep -Eq 'NOT_FOUND:|Image not found\\.'" in publish_source
     assert 'case "${api_lookup_status}" in' in publish_source
     assert 'case "${migration_lookup_status}" in' in publish_source
     assert 'exit "${api_lookup_status}"' in publish_source
@@ -80,12 +87,22 @@ def test_development_deployment_is_approval_gated_and_smoke_tested() -> None:
     assert deploy_job["permissions"] == {"contents": "read", "id-token": "write"}
     assert deploy_job["environment"]["name"] == "development"
     names = step_names(deploy_job)
+    assert names.index("Authenticate to Google Cloud") < names.index(
+        "Verify Google Cloud impersonation"
+    )
+    assert names.index("Verify Google Cloud impersonation") < names.index(
+        "Resolve immutable image digests"
+    )
     assert names.index("Run database migrations") < names.index("Deploy health-only API")
     assert names.index("Deploy health-only API") < names.index(
         "Smoke test deployed health endpoint"
     )
     assert "Record deployment metadata" in names
     assert "Retain deployment evidence" in names
+    impersonation_step = next(
+        step for step in deploy_job["steps"] if step["name"] == "Verify Google Cloud impersonation"
+    )
+    assert impersonation_step["run"] == "gcloud auth print-access-token >/dev/null"
 
     workflow_source = workflow_path.read_text(encoding="utf-8")
     assert "secrets." not in workflow_source
