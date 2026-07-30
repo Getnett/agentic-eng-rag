@@ -83,9 +83,32 @@ jobs:
           api_tag="${image_repository}/api:${GITHUB_SHA}"
           migration_tag="${image_repository}/migrations:${GITHUB_SHA}"
 
-          describe_image_digest() {
-            gcloud artifacts docker images describe "$1" \
-              --format='value(image_summary.digest)'
+          lookup_image_digest() {
+            image_tag="$1"
+
+            for attempt in 1 2 3; do
+              if lookup_output="$(
+                gcloud artifacts docker images describe "${image_tag}" \
+                  --format='value(image_summary.digest)' 2>&1
+              )"; then
+                printf '%s' "${lookup_output}"
+                return 0
+              else
+                lookup_status="$?"
+              fi
+
+              if printf '%s' "${lookup_output}" | grep -Fq 'NOT_FOUND:'; then
+                return 2
+              fi
+
+              if [ "${attempt}" -eq 3 ]; then
+                printf 'Artifact Registry lookup failed after %s attempts: %s\n' \
+                  "${attempt}" "${lookup_output}" >&2
+                return "${lookup_status}"
+              fi
+
+              sleep "$((attempt * 2))"
+            done
           }
 
           verify_image_digest() {
@@ -98,32 +121,49 @@ jobs:
               grep -Fxq "${image_digest}"
           }
 
-          if api_digest="$(describe_image_digest "${api_tag}" 2>/dev/null)"; then
-            verify_image_digest "${image_repository}/api" "${api_digest}"
-            echo "Reusing existing immutable API image ${api_tag}."
-          else
-            docker build \
-              --file apps/api/Dockerfile \
-              --build-arg "APP_REVISION=${GITHUB_SHA}" \
-              --tag "${api_tag}" \
-              .
-            docker push "${api_tag}"
-            api_digest="$(describe_image_digest "${api_tag}")"
-            verify_image_digest "${image_repository}/api" "${api_digest}"
-          fi
+          api_lookup_status=0
+          api_digest="$(lookup_image_digest "${api_tag}")" || api_lookup_status="$?"
+          case "${api_lookup_status}" in
+            0)
+              verify_image_digest "${image_repository}/api" "${api_digest}"
+              echo "Reusing existing immutable API image ${api_tag}."
+              ;;
+            2)
+              docker build \
+                --file apps/api/Dockerfile \
+                --build-arg "APP_REVISION=${GITHUB_SHA}" \
+                --tag "${api_tag}" \
+                .
+              docker push "${api_tag}"
+              api_digest="$(lookup_image_digest "${api_tag}")"
+              verify_image_digest "${image_repository}/api" "${api_digest}"
+              ;;
+            *)
+              exit "${api_lookup_status}"
+              ;;
+          esac
 
-          if migration_digest="$(describe_image_digest "${migration_tag}" 2>/dev/null)"; then
-            verify_image_digest "${image_repository}/migrations" "${migration_digest}"
-            echo "Reusing existing immutable migration image ${migration_tag}."
-          else
-            docker build \
-              --file apps/api/Dockerfile.migrations \
-              --tag "${migration_tag}" \
-              .
-            docker push "${migration_tag}"
-            migration_digest="$(describe_image_digest "${migration_tag}")"
-            verify_image_digest "${image_repository}/migrations" "${migration_digest}"
-          fi
+          migration_lookup_status=0
+          migration_digest="$(lookup_image_digest "${migration_tag}")" ||
+            migration_lookup_status="$?"
+          case "${migration_lookup_status}" in
+            0)
+              verify_image_digest "${image_repository}/migrations" "${migration_digest}"
+              echo "Reusing existing immutable migration image ${migration_tag}."
+              ;;
+            2)
+              docker build \
+                --file apps/api/Dockerfile.migrations \
+                --tag "${migration_tag}" \
+                .
+              docker push "${migration_tag}"
+              migration_digest="$(lookup_image_digest "${migration_tag}")"
+              verify_image_digest "${image_repository}/migrations" "${migration_digest}"
+              ;;
+            *)
+              exit "${migration_lookup_status}"
+              ;;
+          esac
 
           api_image="${image_repository}/api@${api_digest}"
           migration_image="${image_repository}/migrations@${migration_digest}"

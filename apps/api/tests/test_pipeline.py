@@ -60,13 +60,13 @@ def test_main_publication_builds_images_after_verification() -> None:
         step for step in publish_job["steps"] if step["name"] == "Publish or reuse commit images"
     )
     publish_source = publish_step["run"]
-    assert 'if api_digest="$(describe_image_digest "${api_tag}" 2>/dev/null)"; then' in (
-        publish_source
-    )
-    assert (
-        'if migration_digest="$(describe_image_digest "${migration_tag}" 2>/dev/null)"; then'
-        in publish_source
-    )
+    assert "for attempt in 1 2 3" in publish_source
+    assert "grep -Fq 'NOT_FOUND:'" in publish_source
+    assert 'case "${api_lookup_status}" in' in publish_source
+    assert 'case "${migration_lookup_status}" in' in publish_source
+    assert 'exit "${api_lookup_status}"' in publish_source
+    assert 'exit "${migration_lookup_status}"' in publish_source
+    assert publish_source.count("lookup_image_digest") == 5
     assert publish_source.count("verify_image_digest") == 5
 
 
