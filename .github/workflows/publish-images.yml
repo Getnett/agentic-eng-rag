@@ -72,6 +72,9 @@ jobs:
       - name: Install Google Cloud CLI
         uses: google-github-actions/setup-gcloud@v3
 
+      - name: Verify Google Cloud impersonation
+        run: gcloud auth print-access-token >/dev/null
+
       - name: Configure Artifact Registry authentication
         run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
 
@@ -97,7 +100,8 @@ jobs:
                 lookup_status="$?"
               fi
 
-              if printf '%s' "${lookup_output}" | grep -Fq 'NOT_FOUND:'; then
+              if printf '%s' "${lookup_output}" |
+                grep -Eq 'NOT_FOUND:|Image not found\.'; then
                 return 2
               fi
 

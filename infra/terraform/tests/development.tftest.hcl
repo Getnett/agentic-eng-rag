@@ -4,6 +4,14 @@ variables {
   project_id = "rag-dev-example"
 }
 
+override_resource {
+  target          = google_iam_workload_identity_pool.github
+  override_during = plan
+  values = {
+    name = "projects/123456789/locations/global/workloadIdentityPools/rag-dev-github"
+  }
+}
+
 run "development_plan" {
   command = plan
 
@@ -63,18 +71,25 @@ run "development_plan" {
     condition = (
       google_iam_workload_identity_pool_provider.github.oidc[0].issuer_uri == "https://token.actions.githubusercontent.com" &&
       google_iam_workload_identity_pool_provider.github.attribute_mapping["google.subject"] == "assertion.sub" &&
+      strcontains(google_iam_workload_identity_pool_provider.github.attribute_mapping["attribute.delivery_role"], local.github_federation_subjects["publisher"]) &&
+      strcontains(google_iam_workload_identity_pool_provider.github.attribute_mapping["attribute.delivery_role"], local.github_federation_subjects["deployer"]) &&
       strcontains(google_iam_workload_identity_pool_provider.github.attribute_condition, var.github_repository_id) &&
-      strcontains(google_iam_workload_identity_pool_provider.github.attribute_condition, var.github_repository_owner_id)
+      strcontains(google_iam_workload_identity_pool_provider.github.attribute_condition, var.github_repository_owner_id) &&
+      strcontains(google_iam_workload_identity_pool_provider.github.attribute_condition, local.github_federation_subjects["publisher"]) &&
+      strcontains(google_iam_workload_identity_pool_provider.github.attribute_condition, local.github_federation_subjects["deployer"])
     )
-    error_message = "GitHub OIDC trust must use the official issuer and immutable repository and owner IDs."
+    error_message = "GitHub OIDC trust must derive delivery roles from exact subjects and retain immutable repository and owner IDs."
   }
 
   assert {
     condition = (
-      local.github_federation_subjects["publisher"] == "repo:${var.github_repository}:ref:refs/heads/main" &&
-      local.github_federation_subjects["deployer"] == "repo:${var.github_repository}:environment:development"
+      local.github_immutable_subject_prefix == "repo:Getnett@${var.github_repository_owner_id}/agentic-eng-rag@${var.github_repository_id}" &&
+      local.github_federation_subjects["publisher"] == "${local.github_immutable_subject_prefix}:ref:refs/heads/main" &&
+      local.github_federation_subjects["deployer"] == "${local.github_immutable_subject_prefix}:environment:development" &&
+      google_service_account_iam_member.github_federation["publisher"].member == "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.delivery_role/publisher" &&
+      google_service_account_iam_member.github_federation["deployer"].member == "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.delivery_role/deployer"
     )
-    error_message = "Publisher and deployer impersonation must be restricted to main and the approved environment subjects."
+    error_message = "Publisher and deployer impersonation must use role-specific principal sets derived only from main and the approved environment subjects."
   }
 
   assert {

@@ -198,7 +198,10 @@ executions succeeded, and another Terraform plan reports no changes.
 ## 6. Configure keyless GitHub delivery
 
 Terraform creates a GitHub OIDC provider restricted to the repository's
-immutable numeric repository and owner IDs. It creates two separate identities:
+immutable numeric repository and owner IDs. The provider derives a
+`delivery_role` only from the two exact approved GitHub subjects, including
+GitHub's immutable `owner@owner_id/repository@repository_id` subject prefix,
+and binds each service account through its role-specific principal set:
 
 - `publisher` accepts only the exact `main` branch OIDC subject and can write
   images only to the managed Artifact Registry repository.
@@ -231,8 +234,8 @@ secrets.
 In GitHub repository settings, create the `development` environment and require
 the repository owner as a reviewer. Keep "prevent self-review" disabled while
 there is only one operator, otherwise no deployment can be approved. Restrict
-deployment branches to `main`. Also require the `Quality / Repository checks`
-status check before merging to `main`.
+deployment branches to `main`. Also require the `Repository checks` status
+check before merging to `main`.
 
 The main-branch publication workflow first runs `mise run check`, then builds
 and pushes `api:FULL_COMMIT_SHA` and `migrations:FULL_COMMIT_SHA`. Artifact
