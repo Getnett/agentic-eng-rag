@@ -118,6 +118,7 @@ class SourceRepository:
         self,
         *,
         source_type: SourceType,
+        source_location: str,
         title: str,
         tags: Sequence[str] = (),
         document_id: uuid.UUID | None = None,
@@ -125,6 +126,7 @@ class SourceRepository:
         document = SourceDocument(
             id=document_id or uuid.uuid4(),
             source_type=source_type,
+            source_location=source_location,
             title=title,
             tags=list(tags),
         )

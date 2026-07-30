@@ -46,6 +46,7 @@ REQUIRED_CONSTRAINTS = {
     "ck_message_metadata_object",
     "ck_retrieval_trace_chunk_rank_positive",
     "ck_retrieval_trace_metadata_object",
+    "ck_source_document_location",
     "ck_source_document_tags_nonempty",
     "ck_source_document_title",
     "ck_source_version_content_hash",

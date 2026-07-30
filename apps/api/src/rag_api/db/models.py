@@ -177,6 +177,10 @@ class SourceDocument(TimestampMixin, Base):
 
     __tablename__ = "source_document"
     __table_args__ = (
+        CheckConstraint(
+            "length(btrim(source_location)) > 0",
+            name="ck_source_document_location",
+        ),
         CheckConstraint("length(btrim(title)) > 0", name="ck_source_document_title"),
         CheckConstraint(
             "array_position(tags, '') IS NULL",
@@ -202,6 +206,7 @@ class SourceDocument(TimestampMixin, Base):
         server_default=sa.text("gen_random_uuid()"),
     )
     source_type: Mapped[SourceType] = mapped_column(source_type_enum, nullable=False)
+    source_location: Mapped[str] = mapped_column(Text, nullable=False)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     tags: Mapped[list[str]] = mapped_column(
         ARRAY(Text),

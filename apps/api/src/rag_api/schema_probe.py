@@ -80,6 +80,7 @@ async def run_probe() -> dict[str, object]:
                 source_repository = SourceRepository(session)
                 document = await source_repository.create_document(
                     source_type=SourceType.MARKDOWN,
+                    source_location="upload://schema-probe/source.md",
                     title="Schema probe source",
                     tags=("probe",),
                 )

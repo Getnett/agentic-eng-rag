@@ -95,6 +95,7 @@ async def create_complete_chain(session: AsyncSession, suffix: str) -> Chain:
     source_repository = SourceRepository(session)
     document = await source_repository.create_document(
         source_type=SourceType.MARKDOWN,
+        source_location=f"upload://manuals/{suffix}.md",
         title=f"Support manual {suffix}",
         tags=("support", suffix),
     )
@@ -224,6 +225,7 @@ async def test_complete_chain_creation_and_retrieval(async_engine: AsyncEngine) 
 
     assert widget is not None and widget.id == chain.widget_id
     assert document is not None and document.active_version_id == chain.version_id
+    assert document.source_location == "upload://manuals/complete.md"
     assert version is not None and version.status is SourceVersionStatus.INDEXED
     assert len(chunks) == 2
     assert chunks[1].parent_chunk_id == chain.parent_chunk_id
@@ -244,6 +246,7 @@ async def test_invalid_status_and_illegal_transitions_are_rejected(
         source_repository = SourceRepository(session)
         document = await source_repository.create_document(
             source_type=SourceType.TXT,
+            source_location="upload://fixtures/status.txt",
             title="Status fixture",
         )
         version = await source_repository.create_version(
@@ -288,6 +291,7 @@ async def test_cross_document_and_cross_version_chunk_ownership_is_rejected(
         repository = SourceRepository(session)
         first_document = await repository.create_document(
             source_type=SourceType.TXT,
+            source_location="upload://fixtures/first.txt",
             title="First",
         )
         first_version = await repository.create_version(
@@ -303,6 +307,7 @@ async def test_cross_document_and_cross_version_chunk_ownership_is_rejected(
         )[0]
         second_document = await repository.create_document(
             source_type=SourceType.TXT,
+            source_location="upload://fixtures/second.txt",
             title="Second",
         )
         second_version = await repository.create_version(
@@ -347,6 +352,7 @@ async def test_only_one_indexed_version_per_document(async_engine: AsyncEngine) 
         repository = SourceRepository(session)
         document = await repository.create_document(
             source_type=SourceType.PDF,
+            source_location="upload://manuals/versioned.pdf",
             title="Versioned manual",
         )
         first = await repository.create_version(
@@ -381,10 +387,12 @@ async def test_active_version_must_belong_to_its_document(
         repository = SourceRepository(session)
         first_document = await repository.create_document(
             source_type=SourceType.TXT,
+            source_location="upload://fixtures/first-owner.txt",
             title="First active-version owner",
         )
         second_document = await repository.create_document(
             source_type=SourceType.TXT,
+            source_location="upload://fixtures/second-owner.txt",
             title="Second active-version owner",
         )
         second_version = await repository.create_version(
@@ -418,6 +426,7 @@ async def test_embedding_dimension_and_json_object_constraints(
         repository = SourceRepository(session)
         document = await repository.create_document(
             source_type=SourceType.URL,
+            source_location="https://support.example/embedding",
             title="Embedding fixture",
         )
         version = await repository.create_version(

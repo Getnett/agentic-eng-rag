@@ -139,6 +139,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("source_type", source_type, nullable=False),
+        sa.Column("source_location", sa.Text(), nullable=False),
         sa.Column("title", sa.Text(), nullable=False),
         sa.Column(
             "tags",
@@ -148,6 +149,10 @@ def upgrade() -> None:
         ),
         sa.Column("active_version_id", postgresql.UUID(as_uuid=True), nullable=True),
         *_timestamps(),
+        sa.CheckConstraint(
+            "length(btrim(source_location)) > 0",
+            name="ck_source_document_location",
+        ),
         sa.CheckConstraint(
             "length(btrim(title)) > 0",
             name="ck_source_document_title",
