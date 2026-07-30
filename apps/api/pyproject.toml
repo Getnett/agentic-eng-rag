@@ -2,7 +2,11 @@
 name = "rag-support-api"
 version = "0.0.0"
 requires-python = "==3.13.*"
-dependencies = []
+dependencies = [
+  "asyncpg==0.31.0",
+  "pgvector==0.5.0",
+  "sqlalchemy[asyncio]==2.0.51",
+]
 
 [project.optional-dependencies]
 api = [
@@ -12,7 +16,6 @@ migrations = [
     "alembic==1.18.5",
     "cloud-sql-python-connector[pg8000]==1.21.0",
     "pg8000==1.31.5",
-    "sqlalchemy==2.0.51",
 ]
 
 [tool.uv]

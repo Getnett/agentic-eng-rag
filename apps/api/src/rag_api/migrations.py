@@ -19,7 +19,7 @@ from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.engine.interfaces import DBAPIConnection
 
 APPLICATION_SCHEMA = "rag_app"
-HEAD_REVISION = "0001_enable_pgvector"
+HEAD_REVISION = "0002_core_schema"
 API_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -165,11 +165,11 @@ def upgrade(settings: MigrationSettings) -> MigrationResult:
             return _read_result(connection)
 
 
-def downgrade(settings: MigrationSettings) -> None:
-    """Downgrade the baseline to base for explicit local reversibility checks."""
+def downgrade(settings: MigrationSettings, revision: str = "base") -> None:
+    """Downgrade to an explicit revision for local reversibility checks."""
     with migration_engine(settings) as engine:
         with engine.begin() as connection:
-            command.downgrade(_alembic_config(connection), "base")
+            command.downgrade(_alembic_config(connection), revision)
 
 
 def _parser() -> argparse.ArgumentParser:
