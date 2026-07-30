@@ -6,6 +6,10 @@ resource "google_artifact_registry_repository" "application" {
   format        = "DOCKER"
   labels        = local.labels
 
+  docker_config {
+    immutable_tags = true
+  }
+
   depends_on = [
     google_project_service.required["artifactregistry.googleapis.com"],
   ]

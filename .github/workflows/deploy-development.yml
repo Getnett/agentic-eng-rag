@@ -1,0 +1,209 @@
+name: Deploy development
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full 40-character commit SHA already published from main
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: development-deployment
+  cancel-in-progress: false
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
+  ARTIFACT_REPOSITORY: ${{ vars.GCP_ARTIFACT_REPOSITORY }}
+  SOURCE_SHA: ${{ inputs.source_sha }}
+
+jobs:
+  deploy:
+    name: Migrate, deploy, and smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: development
+      url: ${{ steps.service.outputs.url }}
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Validate approved source revision and variables
+        env:
+          WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOYER_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          printf '%s' "${SOURCE_SHA}" | grep -Eq '^[0-9a-f]{40}$'
+          git merge-base --is-ancestor "${SOURCE_SHA}" origin/main
+          test -n "${GCP_PROJECT_ID}"
+          test -n "${GCP_REGION}"
+          test -n "${ARTIFACT_REPOSITORY}"
+          test -n "${WORKLOAD_IDENTITY_PROVIDER}"
+          test -n "${DEPLOYER_SERVICE_ACCOUNT}"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Install Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Resolve immutable image digests
+        id: images
+        run: |
+          set -euo pipefail
+          image_repository="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}"
+          api_tag="${image_repository}/api:${SOURCE_SHA}"
+          migration_tag="${image_repository}/migrations:${SOURCE_SHA}"
+          api_digest="$(
+            gcloud artifacts docker images describe "${api_tag}" \
+              --format='value(image_summary.digest)'
+          )"
+          migration_digest="$(
+            gcloud artifacts docker images describe "${migration_tag}" \
+              --format='value(image_summary.digest)'
+          )"
+
+          printf '%s' "${api_digest}" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          printf '%s' "${migration_digest}" | grep -Eq '^sha256:[0-9a-f]{64}$'
+
+          printf 'api_image=%s\n' "${image_repository}/api@${api_digest}" >>"${GITHUB_OUTPUT}"
+          printf 'migration_image=%s\n' "${image_repository}/migrations@${migration_digest}" >>"${GITHUB_OUTPUT}"
+
+      - name: Run database migrations
+        id: migration
+        env:
+          MIGRATION_IMAGE: ${{ steps.images.outputs.migration_image }}
+        run: |
+          set -euo pipefail
+          gcloud run jobs update rag-dev-migrate \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --image="${MIGRATION_IMAGE}" \
+            --quiet
+          execution="$(
+            gcloud run jobs execute rag-dev-migrate \
+              --project="${GCP_PROJECT_ID}" \
+              --region="${GCP_REGION}" \
+              --wait \
+              --format='value(metadata.name)'
+          )"
+          test -n "${execution}"
+          printf 'execution=%s\n' "${execution}" >>"${GITHUB_OUTPUT}"
+
+      - name: Deploy health-only API
+        id: service
+        env:
+          API_IMAGE: ${{ steps.images.outputs.api_image }}
+        run: |
+          set -euo pipefail
+          revision_suffix="r${SOURCE_SHA:0:7}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gcloud run services update rag-dev-api \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --image="${API_IMAGE}" \
+            --revision-suffix="${revision_suffix}" \
+            --quiet
+          url="$(
+            gcloud run services describe rag-dev-api \
+              --project="${GCP_PROJECT_ID}" \
+              --region="${GCP_REGION}" \
+              --format='value(status.url)'
+          )"
+          test -n "${url}"
+          printf 'url=%s\n' "${url}" >>"${GITHUB_OUTPUT}"
+
+      - name: Smoke test deployed health endpoint
+        env:
+          SERVICE_URL: ${{ steps.service.outputs.url }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 20); do
+            if response="$(curl --fail --silent --show-error "${SERVICE_URL}/health")" &&
+              jq -e \
+                --arg source_revision "${SOURCE_SHA}" \
+                '.status == "ok" and
+                 .service == "rag-support-api" and
+                 .source_revision == $source_revision' \
+                <<<"${response}" >/dev/null; then
+              printf '%s\n' "${response}" >health-response.json
+              break
+            fi
+            if [ "${attempt}" -eq 20 ]; then
+              echo "Development health endpoint did not become ready." >&2
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Record deployment metadata
+        env:
+          API_IMAGE: ${{ steps.images.outputs.api_image }}
+          MIGRATION_IMAGE: ${{ steps.images.outputs.migration_image }}
+          MIGRATION_EXECUTION: ${{ steps.migration.outputs.execution }}
+          SERVICE_URL: ${{ steps.service.outputs.url }}
+        run: |
+          set -euo pipefail
+          service="$(
+            gcloud run services describe rag-dev-api \
+              --project="${GCP_PROJECT_ID}" \
+              --region="${GCP_REGION}" \
+              --format=json
+          )"
+          revision="$(jq -r '.status.latestReadyRevisionName' <<<"${service}")"
+          deployed_image="$(jq -r '.spec.template.spec.containers[0].image' <<<"${service}")"
+          test "${deployed_image}" = "${API_IMAGE}"
+
+          jq -n \
+            --arg source_revision "${SOURCE_SHA}" \
+            --arg api_image "${API_IMAGE}" \
+            --arg migration_image "${MIGRATION_IMAGE}" \
+            --arg migration_execution "${MIGRATION_EXECUTION}" \
+            --arg cloud_run_revision "${revision}" \
+            --arg service_url "${SERVICE_URL}" \
+            --arg workflow_run "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            '{
+              source_revision: $source_revision,
+              api_image: $api_image,
+              migration_image: $migration_image,
+              migration_execution: $migration_execution,
+              cloud_run_revision: $cloud_run_revision,
+              service_url: $service_url,
+              workflow_run: $workflow_run
+            }' >deployment-metadata.json
+
+          {
+            echo "### Development deployment"
+            echo
+            echo "- Source: \`${SOURCE_SHA}\`"
+            echo "- API: \`${API_IMAGE}\`"
+            echo "- Migration execution: \`${MIGRATION_EXECUTION}\`"
+            echo "- Cloud Run revision: \`${revision}\`"
+            echo "- Health: ${SERVICE_URL}/health"
+          } >>"${GITHUB_STEP_SUMMARY}"
+
+      - name: Retain deployment evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: development-deployment-${{ inputs.source_sha }}-${{ github.run_id }}
+          path: |
+            deployment-metadata.json
+            health-response.json
+          if-no-files-found: error
+          retention-days: 90

@@ -15,13 +15,13 @@ variable "region" {
 }
 
 variable "environment" {
-  description = "Environment label. POR-32 provisions development only."
+  description = "Environment label. The current Terraform root provisions development only."
   type        = string
   default     = "dev"
 
   validation {
     condition     = var.environment == "dev"
-    error_message = "POR-32 may provision only the dev environment."
+    error_message = "This Terraform root may provision only the dev environment."
   }
 }
 
@@ -86,6 +86,39 @@ variable "migration_image" {
       ))
     )
     error_message = "migration_image must be null or an immutable image reference ending in @sha256:<64 lowercase hex characters>."
+  }
+}
+
+variable "github_repository" {
+  description = "GitHub owner/repository allowed to federate into the development project."
+  type        = string
+  default     = "Getnett/agentic-eng-rag"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_repository))
+    error_message = "github_repository must use the owner/repository form."
+  }
+}
+
+variable "github_repository_id" {
+  description = "Immutable numeric GitHub repository ID used in the OIDC trust condition."
+  type        = string
+  default     = "1308771373"
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.github_repository_id))
+    error_message = "github_repository_id must contain only decimal digits."
+  }
+}
+
+variable "github_repository_owner_id" {
+  description = "Immutable numeric GitHub owner ID used in the OIDC trust condition."
+  type        = string
+  default     = "24660273"
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.github_repository_owner_id))
+    error_message = "github_repository_owner_id must contain only decimal digits."
   }
 }
 

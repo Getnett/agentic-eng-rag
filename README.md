@@ -28,17 +28,18 @@ Both dependency managers use committed lockfiles. `bootstrap` fails rather than 
 
 ## Common commands
 
-| Command                 | Purpose                                                |
-| ----------------------- | ------------------------------------------------------ |
-| `mise run bootstrap`    | Install all locked JavaScript and Python dependencies. |
-| `mise run format`       | Format TypeScript, Python, and Terraform workspaces.   |
-| `mise run format:check` | Verify formatting without changing files.              |
-| `mise run lint`         | Run ESLint and Ruff.                                   |
-| `mise run typecheck`    | Run TypeScript and Python type checkers.               |
-| `mise run test`         | Run workspace tests and Terraform validation.          |
-| `mise run check`        | Run every non-mutating quality gate used by CI.        |
-| `mise run db:migrate`   | Upgrade the configured database to the migration head. |
-| `mise run db:downgrade` | Downgrade the configured database to the base.         |
+| Command                   | Purpose                                                |
+| ------------------------- | ------------------------------------------------------ |
+| `mise run bootstrap`      | Install all locked JavaScript and Python dependencies. |
+| `mise run format`         | Format TypeScript, Python, and Terraform workspaces.   |
+| `mise run format:check`   | Verify formatting without changing files.              |
+| `mise run lint`           | Run ESLint and Ruff.                                   |
+| `mise run typecheck`      | Run TypeScript and Python type checkers.               |
+| `mise run test`           | Run workspace tests and Terraform validation.          |
+| `mise run check`          | Run every non-mutating quality gate used by CI.        |
+| `mise run test:api-image` | Build and smoke-test the health-only API container.    |
+| `mise run db:migrate`     | Upgrade the configured database to the migration head. |
+| `mise run db:downgrade`   | Downgrade the configured database to the base.         |
 
 ## Database migrations
 
@@ -69,6 +70,23 @@ Cloud execution uses `INSTANCE_CONNECTION_NAME`, `DB_NAME`, and `DB_USER`.
 Terraform supplies these to a passwordless IAM-authenticated Cloud Run job. See
 [`infra/terraform/README.md`](infra/terraform/README.md) for the two-phase image
 and job deployment.
+
+## Development delivery
+
+Pull requests run the complete locked quality gate. After a merge, GitHub Actions
+builds the API and migration images, tags them with the full commit SHA in an
+immutable Artifact Registry repository, and retains a digest manifest.
+
+Development deployment is a separate, manually triggered workflow protected by
+the GitHub `development` environment. It accepts a full commit SHA from `main`,
+resolves both immutable digests, runs the migration job, deploys the health-only
+API revision, calls `/health`, and retains the resulting revision, image, and
+smoke-test metadata for 90 days.
+
+GitHub authenticates to GCP through short-lived Workload Identity Federation
+credentials. No service-account key or cloud credential belongs in GitHub
+secrets. See [`infra/terraform/README.md`](infra/terraform/README.md) for the
+one-time repository variables, approval gate, and operator procedure.
 
 ## Workspace layout
 

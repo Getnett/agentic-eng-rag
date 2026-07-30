@@ -3,10 +3,16 @@
 FROM ghcr.io/astral-sh/uv:0.11.30@sha256:93b61e21202b1dab861092748e46bbd6e0e41dd84f59b9174efd2353186e1b47 AS uv
 FROM python:3.13.14-slim-bookworm@sha256:9d7f287598e1a5a978c015ee176d8216435aaf335ed69ac3c38dd1bbb10e8d64
 
-COPY --from=uv /uv /uvx /bin/
+ARG APP_REVISION=local
+
+ENV APP_REVISION="${APP_REVISION}" \
+    PATH="/workspace/.venv/bin:${PATH}" \
+    PYTHONPATH="/workspace/apps/api/src" \
+    PYTHONUNBUFFERED="1"
 
 WORKDIR /workspace
 
+COPY --from=uv /uv /uvx /bin/
 COPY pyproject.toml uv.lock ./
 COPY apps/api/pyproject.toml apps/api/pyproject.toml
 COPY apps/worker/pyproject.toml apps/worker/pyproject.toml
@@ -16,19 +22,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --frozen \
     --no-dev \
     --package rag-support-api \
-    --extra migrations \
+    --extra api \
     --no-install-workspace
 
-COPY apps/api/alembic.ini apps/api/alembic.ini
-COPY apps/api/migrations apps/api/migrations
 COPY apps/api/src apps/api/src
 
-ENV PATH="/workspace/.venv/bin:${PATH}" \
-    PYTHONPATH="/workspace/apps/api/src" \
-    PYTHONDONTWRITEBYTECODE="1" \
-    PYTHONUNBUFFERED="1"
+WORKDIR /workspace/apps/api
 
 USER 65532:65532
+EXPOSE 8080
 
-ENTRYPOINT ["python", "-m", "rag_api.migrations"]
-CMD ["upgrade"]
+CMD ["fastapi", "run", "--port", "8080", "--workers", "1"]

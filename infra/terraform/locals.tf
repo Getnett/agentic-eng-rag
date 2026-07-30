@@ -13,6 +13,7 @@ locals {
     "cloudresourcemanager.googleapis.com",
     "compute.googleapis.com",
     "iam.googleapis.com",
+    "iamcredentials.googleapis.com",
     "logging.googleapis.com",
     "monitoring.googleapis.com",
     "run.googleapis.com",
@@ -90,15 +91,23 @@ locals {
     ]
   ])
 
+  github_federation_subjects = {
+    deployer  = "repo:${var.github_repository}:environment:development"
+    publisher = "repo:${var.github_repository}:ref:refs/heads/main"
+  }
+
   cloud_run_services = {
     admin = {
       ingress = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+      public  = false
     }
     api = {
-      ingress = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+      ingress = "INGRESS_TRAFFIC_ALL"
+      public  = true
     }
     worker = {
       ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+      public  = false
     }
   }
 }

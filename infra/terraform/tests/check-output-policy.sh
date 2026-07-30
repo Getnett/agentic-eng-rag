@@ -7,9 +7,11 @@ outputs_file="$terraform_dir/outputs.tf"
 expected_outputs=$(
   printf '%s\n' \
     artifact_registry_repository_url \
+    automation_service_account_emails \
     cloud_run_service_uris \
     cloud_sql_instance_connection_name \
     cloud_tasks_queue_name \
+    github_workload_identity_provider \
     migration_job_name \
     project_id \
     raw_sources_bucket_name \
@@ -33,9 +35,9 @@ fi
 
 if grep -R -n \
   --include='*.tf' \
-  -E 'secret_data[[:space:]]*=|secret_payload[[:space:]]*=|password[[:space:]]*=' \
+  -E 'resource "google_service_account_key"|secret_data[[:space:]]*=|secret_payload[[:space:]]*=|password[[:space:]]*=' \
   "$terraform_dir"; then
-  echo "Terraform must not manage secret payloads or passwords." >&2
+  echo "Terraform must not manage service-account keys, secret payloads, or passwords." >&2
   exit 1
 fi
 

@@ -1,6 +1,11 @@
 project_id = "replace-with-development-project-id"
 region     = "europe-west1"
 
+# Immutable GitHub IDs protect workload federation from repository/owner renames.
+github_repository          = "OWNER/REPOSITORY"
+github_repository_id       = "NUMERIC_REPOSITORY_ID"
+github_repository_owner_id = "NUMERIC_OWNER_ID"
+
 # Keep safeguards enabled for ordinary plans and applies.
 deletion_protection      = true
 allow_destructive_cleanup = false
