@@ -24,7 +24,9 @@ async def main() -> None:
     if os.getenv("RUN_VERTEX_INTEGRATION") != "1":
         raise SystemExit(
             "Set RUN_VERTEX_INTEGRATION=1 plus GOOGLE_CLOUD_PROJECT, "
-            "GOOGLE_CLOUD_LOCATION, and VERTEX_GENERATION_MODEL to run the billed smoke test."
+            "GOOGLE_CLOUD_LOCATION, VERTEX_GENERATION_MODEL, and both "
+            "VERTEX_GENERATION_*_COST_PER_MILLION_TOKENS_USD values to run the "
+            "billed smoke test."
         )
 
     adapter = VertexGenerationAdapter(VertexGenerationConfig.from_environment())

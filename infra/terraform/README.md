@@ -131,11 +131,12 @@ Manual verification:
    the API and migration runtime identities.
 9. Re-run `plan`; expect no changes.
 
-The API receives `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, and
-`VERTEX_GENERATION_MODEL` as non-secret environment values. Its dedicated service
-account alone receives `roles/aiplatform.user`; no provider API key or static
-service-account key is used. The default development model is configurable in
-`dev.tfvars` because model availability and lifecycle vary by region.
+The API receives `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`,
+`VERTEX_GENERATION_MODEL`, and explicit input/output per-million-token USD
+estimates as non-secret environment values. Its dedicated service account alone
+receives `roles/aiplatform.user`; no provider API key or static service-account key
+is used. Change the model and both matching price variables together in
+`dev.tfvars` because model availability, lifecycle, and pricing vary.
 
 ## 4. Build and configure the migration job
 

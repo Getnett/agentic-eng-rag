@@ -117,6 +117,8 @@ def test_environment_configuration_requires_project_location_and_model() -> None
             "GOOGLE_CLOUD_PROJECT": "customer-support-rag",
             "GOOGLE_CLOUD_LOCATION": "europe-west1",
             "VERTEX_GENERATION_MODEL": "gemini-test",
+            "VERTEX_GENERATION_INPUT_COST_PER_MILLION_TOKENS_USD": "0.10",
+            "VERTEX_GENERATION_OUTPUT_COST_PER_MILLION_TOKENS_USD": "0.40",
         }
     )
 
@@ -124,21 +126,41 @@ def test_environment_configuration_requires_project_location_and_model() -> None
         project_id="customer-support-rag",
         location="europe-west1",
         model_id="gemini-test",
+        input_cost_per_million_tokens_usd=Decimal("0.10"),
+        output_cost_per_million_tokens_usd=Decimal("0.40"),
     )
 
     for missing_name in (
         "GOOGLE_CLOUD_PROJECT",
         "GOOGLE_CLOUD_LOCATION",
         "VERTEX_GENERATION_MODEL",
+        "VERTEX_GENERATION_INPUT_COST_PER_MILLION_TOKENS_USD",
+        "VERTEX_GENERATION_OUTPUT_COST_PER_MILLION_TOKENS_USD",
     ):
         values = {
             "GOOGLE_CLOUD_PROJECT": "customer-support-rag",
             "GOOGLE_CLOUD_LOCATION": "europe-west1",
             "VERTEX_GENERATION_MODEL": "gemini-test",
+            "VERTEX_GENERATION_INPUT_COST_PER_MILLION_TOKENS_USD": "0.10",
+            "VERTEX_GENERATION_OUTPUT_COST_PER_MILLION_TOKENS_USD": "0.40",
         }
         del values[missing_name]
         with pytest.raises(ValueError, match=missing_name):
             VertexGenerationConfig.from_environment(values)
+
+
+@pytest.mark.parametrize("invalid_cost", ["", "unknown", "-0.01", "NaN", "Infinity"])
+def test_environment_configuration_rejects_invalid_pricing(invalid_cost: str) -> None:
+    values = {
+        "GOOGLE_CLOUD_PROJECT": "customer-support-rag",
+        "GOOGLE_CLOUD_LOCATION": "europe-west1",
+        "VERTEX_GENERATION_MODEL": "gemini-test",
+        "VERTEX_GENERATION_INPUT_COST_PER_MILLION_TOKENS_USD": invalid_cost,
+        "VERTEX_GENERATION_OUTPUT_COST_PER_MILLION_TOKENS_USD": "0.40",
+    }
+
+    with pytest.raises(ValueError, match="INPUT_COST"):
+        VertexGenerationConfig.from_environment(values)
 
 
 def test_vertex_adapter_satisfies_generation_contract() -> None:

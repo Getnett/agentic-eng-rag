@@ -6,7 +6,7 @@ import logging
 import os
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Protocol
 
 import httpx
@@ -34,6 +34,8 @@ VERTEX_PROVIDER_ID = "vertex-ai"
 PROJECT_ENVIRONMENT_VARIABLE = "GOOGLE_CLOUD_PROJECT"
 LOCATION_ENVIRONMENT_VARIABLE = "GOOGLE_CLOUD_LOCATION"
 MODEL_ENVIRONMENT_VARIABLE = "VERTEX_GENERATION_MODEL"
+INPUT_COST_ENVIRONMENT_VARIABLE = "VERTEX_GENERATION_INPUT_COST_PER_MILLION_TOKENS_USD"
+OUTPUT_COST_ENVIRONMENT_VARIABLE = "VERTEX_GENERATION_OUTPUT_COST_PER_MILLION_TOKENS_USD"
 TOKENS_PER_MILLION = Decimal(1_000_000)
 
 
@@ -44,6 +46,17 @@ def _required_environment_value(values: Mapping[str, str], name: str) -> str:
     return value.strip()
 
 
+def _required_nonnegative_decimal(values: Mapping[str, str], name: str) -> Decimal:
+    raw_value = _required_environment_value(values, name)
+    try:
+        value = Decimal(raw_value)
+    except InvalidOperation as error:
+        raise ValueError(f"{name} must be a decimal value.") from error
+    if not value.is_finite() or value < 0:
+        raise ValueError(f"{name} must be a finite non-negative decimal value.")
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class VertexGenerationConfig:
     """Non-secret Vertex routing and diagnostic-cost configuration."""
@@ -51,8 +64,8 @@ class VertexGenerationConfig:
     project_id: str
     location: str
     model_id: str
-    input_cost_per_million_tokens_usd: Decimal = Decimal(0)
-    output_cost_per_million_tokens_usd: Decimal = Decimal(0)
+    input_cost_per_million_tokens_usd: Decimal
+    output_cost_per_million_tokens_usd: Decimal
 
     def __post_init__(self) -> None:
         for name, text_value in (
@@ -88,6 +101,14 @@ class VertexGenerationConfig:
             model_id=_required_environment_value(
                 environment,
                 MODEL_ENVIRONMENT_VARIABLE,
+            ),
+            input_cost_per_million_tokens_usd=_required_nonnegative_decimal(
+                environment,
+                INPUT_COST_ENVIRONMENT_VARIABLE,
+            ),
+            output_cost_per_million_tokens_usd=_required_nonnegative_decimal(
+                environment,
+                OUTPUT_COST_ENVIRONMENT_VARIABLE,
             ),
         )
 

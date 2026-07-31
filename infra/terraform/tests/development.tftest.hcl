@@ -62,9 +62,19 @@ run "development_plan" {
         for environment in google_cloud_run_v2_service.runtime["api"].template[0].containers[0].env :
         environment.value == "gemini-2.5-flash-lite"
         if environment.name == "VERTEX_GENERATION_MODEL"
+      ]) &&
+      one([
+        for environment in google_cloud_run_v2_service.runtime["api"].template[0].containers[0].env :
+        environment.value == "0.1"
+        if environment.name == "VERTEX_GENERATION_INPUT_COST_PER_MILLION_TOKENS_USD"
+      ]) &&
+      one([
+        for environment in google_cloud_run_v2_service.runtime["api"].template[0].containers[0].env :
+        environment.value == "0.4"
+        if environment.name == "VERTEX_GENERATION_OUTPUT_COST_PER_MILLION_TOKENS_USD"
       ])
     )
-    error_message = "The API must receive non-secret Cloud SQL and Vertex routing identifiers."
+    error_message = "The API must receive non-secret Cloud SQL and explicit Vertex routing and pricing configuration."
   }
 
   assert {

@@ -146,9 +146,11 @@ in [`infra/terraform/README.md`](infra/terraform/README.md).
 ## Verify Vertex generation
 
 The development API uses the Google Gen AI SDK in Vertex mode and authenticates
-with its attached Cloud Run service identity. Terraform supplies only the
-non-secret project, `europe-west1` location, and configured model ID; no provider
-API key is needed. Run deterministic tests with `mise run test:vertex`.
+with its attached Cloud Run service identity. Terraform supplies only non-secret
+project, location, model, and per-million-token input/output price values; no
+provider API key is needed. Requiring explicit prices prevents unknown pricing
+from being reported as free usage. Run deterministic tests with
+`mise run test:vertex`.
 
 After applying the reviewed Terraform change and deploying the merged API image,
 an authenticated administrator can invoke the development-only streaming probe:

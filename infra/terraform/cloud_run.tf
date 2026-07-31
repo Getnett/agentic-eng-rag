@@ -34,9 +34,11 @@ resource "google_cloud_run_v2_service" "runtime" {
             google_service_account.runtime["api"].email,
             ".gserviceaccount.com",
           )
-          GOOGLE_CLOUD_PROJECT    = var.project_id
-          GOOGLE_CLOUD_LOCATION   = var.region
-          VERTEX_GENERATION_MODEL = var.vertex_generation_model
+          GOOGLE_CLOUD_PROJECT                                 = var.project_id
+          GOOGLE_CLOUD_LOCATION                                = var.region
+          VERTEX_GENERATION_MODEL                              = var.vertex_generation_model
+          VERTEX_GENERATION_INPUT_COST_PER_MILLION_TOKENS_USD  = tostring(var.vertex_generation_input_cost_per_million_tokens_usd)
+          VERTEX_GENERATION_OUTPUT_COST_PER_MILLION_TOKENS_USD = tostring(var.vertex_generation_output_cost_per_million_tokens_usd)
         } : {}
 
         content {
