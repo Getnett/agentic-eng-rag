@@ -98,7 +98,8 @@ def successful_responses() -> tuple[types.GenerateContentResponse, ...]:
             usage_metadata=types.GenerateContentResponseUsageMetadata(
                 prompt_token_count=10,
                 candidates_token_count=4,
-                total_token_count=14,
+                thoughts_token_count=3,
+                total_token_count=17,
             ),
         ),
     )
@@ -189,8 +190,8 @@ async def test_streams_normalized_events_and_safe_metadata(
     assert result.metadata.provider_id == "vertex-ai"
     assert result.metadata.model_id == "gemini-test"
     assert result.metadata.timeout_seconds == 2.5
-    assert result.metadata.token_usage == TokenUsage(input_tokens=10, output_tokens=4)
-    assert result.metadata.estimated_cost_usd == Decimal("0.0000026")
+    assert result.metadata.token_usage == TokenUsage(input_tokens=10, output_tokens=7)
+    assert result.metadata.estimated_cost_usd == Decimal("0.0000038")
     assert len(factory.calls) == 1
     model, contents, sdk_config = factory.calls[0]
     assert model == "gemini-test"
@@ -252,6 +253,26 @@ async def test_maps_sdk_failures_without_leaking_provider_details(
     assert SENSITIVE_PROMPT not in str(raised.value)
     assert SENSITIVE_PROMPT not in caplog.text
     assert raised.value.__suppress_context__ is True
+
+
+def test_maps_client_initialization_credentials_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def fail_client_creation(**_kwargs: object) -> None:
+        raise DefaultCredentialsError(SENSITIVE_PROMPT)  # type: ignore[no-untyped-call]
+
+    monkeypatch.setattr("rag_providers.vertex.genai.Client", fail_client_creation)
+
+    with caplog.at_level(logging.WARNING, logger="rag_providers.vertex"):
+        with pytest.raises(ProviderAdapterError) as raised:
+            VertexGenerationAdapter(vertex_config())
+
+    assert raised.value.code is ProviderErrorCode.INVALID_REQUEST
+    assert raised.value.retryable is False
+    assert raised.value.__suppress_context__ is True
+    assert SENSITIVE_PROMPT not in str(raised.value)
+    assert SENSITIVE_PROMPT not in caplog.text
 
 
 @pytest.mark.anyio

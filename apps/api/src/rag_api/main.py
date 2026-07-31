@@ -106,6 +106,15 @@ async def vertex_generation_smoke(
     factory = request.app.state.vertex_generation_adapter_factory
     try:
         adapter = factory()
+    except ProviderAdapterError as error:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "code": error.code.value,
+                "message": str(error),
+                "retryable": error.retryable,
+            },
+        )
     except ValueError:
         return JSONResponse(
             status_code=503,

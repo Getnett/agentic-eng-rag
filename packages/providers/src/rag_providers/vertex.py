@@ -139,12 +139,27 @@ class VertexGenerationAdapter:
         self._stream_factory: VertexStreamFactory
         self._close_callback: Callable[[], Awaitable[None]] | None
         if stream_factory is None:
-            client = genai.Client(
-                vertexai=True,
-                project=config.project_id,
-                location=config.location,
-                http_options=types.HttpOptions(api_version="v1"),
-            )
+            try:
+                client = genai.Client(
+                    vertexai=True,
+                    project=config.project_id,
+                    location=config.location,
+                    http_options=types.HttpOptions(api_version="v1"),
+                )
+            except Exception as error:
+                mapped_error = self._map_sdk_error(error)
+                logger.warning(
+                    (
+                        "Vertex client initialization failed: provider_id=%s "
+                        "model_id=%s location=%s error_code=%s"
+                    ),
+                    VERTEX_PROVIDER_ID,
+                    self._config.model_id,
+                    self._config.location,
+                    mapped_error.code.value,
+                    extra=self._log_fields(error_code=mapped_error.code),
+                )
+                raise mapped_error from None
             self._stream_factory = client.aio.models.generate_content_stream
             self._close_callback = client.aio.aclose
         else:
@@ -257,7 +272,7 @@ class VertexGenerationAdapter:
             )
         token_usage = TokenUsage(
             input_tokens=usage.prompt_token_count,
-            output_tokens=usage.candidates_token_count,
+            output_tokens=usage.candidates_token_count + (usage.thoughts_token_count or 0),
         )
         estimated_cost = (
             self._config.input_cost_per_million_tokens_usd * token_usage.input_tokens

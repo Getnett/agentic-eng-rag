@@ -6,7 +6,7 @@ import httpx
 import pytest
 from rag_api.auth import AdminPrincipal, current_admin
 from rag_api.main import create_app
-from rag_providers import FakeGenerationAdapter, ProviderErrorCode
+from rag_providers import FakeGenerationAdapter, ProviderAdapterError, ProviderErrorCode
 
 
 def admin() -> AdminPrincipal:
@@ -73,6 +73,35 @@ async def test_smoke_endpoint_returns_only_normalized_provider_failure(
     assert response.status_code == 200
     assert response.text == "\n[provider-error:unavailable]\n"
     assert "Deterministic fake provider failure" not in response.text
+
+
+@pytest.mark.anyio
+async def test_smoke_endpoint_normalizes_adapter_initialization_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENVIRONMENT", "dev")
+
+    def fail_adapter_initialization() -> FakeGenerationAdapter:
+        raise ProviderAdapterError(
+            code=ProviderErrorCode.INVALID_REQUEST,
+            message="The Vertex generation request is not permitted.",
+            provider_id="vertex-ai",
+            model_id="gemini-test",
+        )
+
+    app = create_app(vertex_generation_adapter_factory=fail_adapter_initialization)
+    app.dependency_overrides[current_admin] = admin
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post("/admin/ai/vertex-generation-smoke")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "code": "invalid_request",
+        "message": "The Vertex generation request is not permitted.",
+        "retryable": False,
+    }
 
 
 @pytest.mark.anyio
