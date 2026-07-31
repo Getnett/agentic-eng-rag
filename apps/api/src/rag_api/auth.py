@@ -27,7 +27,7 @@ from rag_api.db.repositories import AdminUserRepository
 ALLOWED_JWT_ALGORITHMS = frozenset({"RS256", "ES256", "EdDSA"})
 AUTHENTICATED_ROLE: Literal["authenticated"] = "authenticated"
 ADMIN_ROLE: Literal["admin"] = "admin"
-UNKNOWN_KEY_REFRESH_INTERVAL_SECONDS = 60.0
+JWKS_REFRESH_COOLDOWN_SECONDS = 60.0
 
 
 class AuthConfigurationError(ValueError):
@@ -143,8 +143,8 @@ class RemoteJwksProvider:
         self._keys: dict[str, dict[str, Any]] = {}
         self._expires_at = 0.0
         self._refresh_generation = 0
-        self._next_unknown_key_refresh_at = 0.0
-        self._unknown_key_refresh_failed = False
+        self._next_refresh_attempt_at = 0.0
+        self._refresh_failed = False
         self._lock = asyncio.Lock()
 
     async def get_key(self, key_id: str) -> dict[str, Any]:
@@ -165,7 +165,7 @@ class RemoteJwksProvider:
         async with self._lock:
             if self._clock() < self._expires_at:
                 return
-            self._install_keys(await self._fetch_keys())
+            await self._refresh_keys_with_cooldown()
 
     async def _refresh_for_unknown_key(
         self,
@@ -178,20 +178,31 @@ class RemoteJwksProvider:
                 return
 
             now = self._clock()
-            if now < self._next_unknown_key_refresh_at:
-                if self._unknown_key_refresh_failed:
-                    raise TokenVerificationUnavailable(
-                        "The token signing keys could not be loaded."
-                    )
+            if now < self._next_refresh_attempt_at:
+                if self._refresh_failed:
+                    self._raise_cached_refresh_failure()
                 return
 
-            self._next_unknown_key_refresh_at = now + UNKNOWN_KEY_REFRESH_INTERVAL_SECONDS
-            try:
-                keys = await self._fetch_keys()
-            except TokenVerificationUnavailable:
-                self._unknown_key_refresh_failed = True
-                raise
-            self._install_keys(keys)
+            await self._refresh_keys_with_cooldown()
+
+    async def _refresh_keys_with_cooldown(self) -> None:
+        now = self._clock()
+        if now < self._next_refresh_attempt_at:
+            if self._refresh_failed:
+                self._raise_cached_refresh_failure()
+            return
+
+        self._next_refresh_attempt_at = now + JWKS_REFRESH_COOLDOWN_SECONDS
+        try:
+            keys = await self._fetch_keys()
+        except TokenVerificationUnavailable:
+            self._refresh_failed = True
+            raise
+        self._install_keys(keys)
+
+    @staticmethod
+    def _raise_cached_refresh_failure() -> None:
+        raise TokenVerificationUnavailable("The token signing keys could not be loaded.")
 
     async def _fetch_keys(self) -> dict[str, dict[str, Any]]:
         try:
@@ -226,8 +237,8 @@ class RemoteJwksProvider:
         self._keys = keys
         self._expires_at = now + self._cache_ttl_seconds
         self._refresh_generation += 1
-        self._next_unknown_key_refresh_at = now + UNKNOWN_KEY_REFRESH_INTERVAL_SECONDS
-        self._unknown_key_refresh_failed = False
+        self._next_refresh_attempt_at = now + JWKS_REFRESH_COOLDOWN_SECONDS
+        self._refresh_failed = False
 
 
 @dataclass(frozen=True, slots=True)

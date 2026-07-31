@@ -60,6 +60,23 @@ class CountingRemoteJwksProvider(RemoteJwksProvider):
         return {KEY_ID: self._public_jwk}
 
 
+class FailingRemoteJwksProvider(RemoteJwksProvider):
+    """Model a deterministic Supabase JWKS outage."""
+
+    def __init__(self, clock: list[float]) -> None:
+        super().__init__(
+            jwks_url=f"{ISSUER}/.well-known/jwks.json",
+            cache_ttl_seconds=600,
+            clock=lambda: clock[0],
+        )
+        self.fetch_count = 0
+
+    async def _fetch_keys(self) -> dict[str, dict[str, Any]]:
+        self.fetch_count += 1
+        await asyncio.sleep(0)
+        raise TokenVerificationUnavailable("deterministic test outage")
+
+
 class UnavailableVerifier:
     async def verify(self, _token: str) -> VerifiedSupabaseIdentity:
         raise TokenVerificationUnavailable("provider detail must remain private")
@@ -186,6 +203,30 @@ async def test_unknown_key_refreshes_are_coalesced_and_rate_limited(
     clock[0] = 61.0
     with pytest.raises(InvalidAccessToken):
         await provider.get_key("another-attacker-key")
+    assert provider.fetch_count == 2
+
+
+@pytest.mark.anyio
+async def test_expired_cache_refresh_failures_are_coalesced_and_backed_off() -> None:
+    clock = [0.0]
+    provider = FailingRemoteJwksProvider(clock)
+
+    results = await asyncio.gather(
+        *(provider.get_key(KEY_ID) for _index in range(20)),
+        return_exceptions=True,
+    )
+
+    assert all(isinstance(result, TokenVerificationUnavailable) for result in results)
+    assert provider.fetch_count == 1
+
+    clock[0] = 59.0
+    with pytest.raises(TokenVerificationUnavailable):
+        await provider.get_key(KEY_ID)
+    assert provider.fetch_count == 1
+
+    clock[0] = 60.0
+    with pytest.raises(TokenVerificationUnavailable):
+        await provider.get_key(KEY_ID)
     assert provider.fetch_count == 2
 
 
