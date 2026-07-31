@@ -25,7 +25,6 @@ from rag_providers.contracts import (
     ProviderResultMetadata,
     ProviderRole,
     TokenUsage,
-    estimate_tokens,
 )
 
 logger = logging.getLogger(__name__)
@@ -125,6 +124,17 @@ class VertexStreamFactory(Protocol):
     ) -> AsyncIterator[types.GenerateContentResponse]: ...
 
 
+class VertexTokenCounter(Protocol):
+    """Small SDK seam for model-aware input budget enforcement."""
+
+    async def __call__(
+        self,
+        *,
+        model: str,
+        contents: str,
+    ) -> types.CountTokensResponse: ...
+
+
 class VertexGenerationAdapter:
     """Stream Vertex text generation through the provider-neutral contract."""
 
@@ -133,10 +143,12 @@ class VertexGenerationAdapter:
         config: VertexGenerationConfig,
         *,
         stream_factory: VertexStreamFactory | None = None,
+        token_counter: VertexTokenCounter | None = None,
         close_callback: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self._config = config
         self._stream_factory: VertexStreamFactory
+        self._token_counter: VertexTokenCounter
         self._close_callback: Callable[[], Awaitable[None]] | None
         if stream_factory is None:
             try:
@@ -161,9 +173,13 @@ class VertexGenerationAdapter:
                 )
                 raise mapped_error from None
             self._stream_factory = client.aio.models.generate_content_stream
+            self._token_counter = client.aio.models.count_tokens
             self._close_callback = client.aio.aclose
         else:
+            if token_counter is None:
+                raise ValueError("token_counter is required with an injected stream_factory.")
             self._stream_factory = stream_factory
+            self._token_counter = token_counter
             self._close_callback = close_callback
 
     @property
@@ -175,16 +191,6 @@ class VertexGenerationAdapter:
         )
 
     async def generate(self, request: GenerationRequest) -> AsyncIterator[GenerationEvent]:
-        capabilities = self.capabilities
-        input_token_estimate = estimate_tokens((request.prompt,))
-        if input_token_estimate > request.budget.max_input_tokens:
-            raise ProviderAdapterError(
-                code=ProviderErrorCode.INVALID_REQUEST,
-                message="The request exceeds its input-token budget.",
-                provider_id=capabilities.provider_id,
-                model_id=capabilities.model_id,
-            )
-
         output_limit = request.budget.max_output_tokens
         assert output_limit is not None
         request_config = types.GenerateContentConfig(
@@ -199,6 +205,20 @@ class VertexGenerationAdapter:
         text_seen = False
 
         try:
+            count_response = await self._token_counter(
+                model=self._config.model_id,
+                contents=request.prompt,
+            )
+            if count_response.total_tokens is None:
+                raise self._error(
+                    ProviderErrorCode.INVALID_RESPONSE,
+                    "The model provider omitted the input-token count.",
+                )
+            if count_response.total_tokens > request.budget.max_input_tokens:
+                raise self._error(
+                    ProviderErrorCode.INVALID_REQUEST,
+                    "The request exceeds its input-token budget.",
+                )
             stream = await self._stream_factory(
                 model=self._config.model_id,
                 contents=request.prompt,

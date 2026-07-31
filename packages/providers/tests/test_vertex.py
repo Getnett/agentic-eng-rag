@@ -53,6 +53,40 @@ class ScriptedStreamFactory:
         return responses()
 
 
+class ScriptedTokenCounter:
+    def __init__(
+        self,
+        total_tokens: int | None = 4,
+        failure: Exception | None = None,
+    ) -> None:
+        self.total_tokens = total_tokens
+        self.failure = failure
+        self.calls: list[tuple[str, str]] = []
+
+    async def __call__(
+        self,
+        *,
+        model: str,
+        contents: str,
+    ) -> types.CountTokensResponse:
+        self.calls.append((model, contents))
+        if self.failure is not None:
+            raise self.failure
+        return types.CountTokensResponse(total_tokens=self.total_tokens)
+
+
+def vertex_adapter(
+    factory: ScriptedStreamFactory,
+    *,
+    token_counter: ScriptedTokenCounter | None = None,
+) -> VertexGenerationAdapter:
+    return VertexGenerationAdapter(
+        vertex_config(),
+        stream_factory=factory,
+        token_counter=token_counter or ScriptedTokenCounter(),
+    )
+
+
 def vertex_config() -> VertexGenerationConfig:
     return VertexGenerationConfig(
         project_id="customer-support-rag",
@@ -165,10 +199,7 @@ def test_environment_configuration_rejects_invalid_pricing(invalid_cost: str) ->
 
 
 def test_vertex_adapter_satisfies_generation_contract() -> None:
-    adapter = VertexGenerationAdapter(
-        vertex_config(),
-        stream_factory=ScriptedStreamFactory(successful_responses()),
-    )
+    adapter = vertex_adapter(ScriptedStreamFactory(successful_responses()))
     generation_adapter: GenerationAdapter = adapter
 
     assert generation_adapter.capabilities.provider_id == "vertex-ai"
@@ -180,7 +211,8 @@ async def test_streams_normalized_events_and_safe_metadata(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     factory = ScriptedStreamFactory(successful_responses())
-    adapter = VertexGenerationAdapter(vertex_config(), stream_factory=factory)
+    token_counter = ScriptedTokenCounter(total_tokens=10)
+    adapter = vertex_adapter(factory, token_counter=token_counter)
     runtime = ProviderOrchestrator(generation=adapter)
 
     with caplog.at_level(logging.INFO, logger="rag_providers.vertex"):
@@ -193,6 +225,7 @@ async def test_streams_normalized_events_and_safe_metadata(
     assert result.metadata.token_usage == TokenUsage(input_tokens=10, output_tokens=7)
     assert result.metadata.estimated_cost_usd == Decimal("0.0000038")
     assert len(factory.calls) == 1
+    assert token_counter.calls == [("gemini-test", SENSITIVE_PROMPT)]
     model, contents, sdk_config = factory.calls[0]
     assert model == "gemini-test"
     assert contents == SENSITIVE_PROMPT
@@ -236,10 +269,7 @@ async def test_maps_sdk_failures_without_leaking_provider_details(
     retryable: bool,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    adapter = VertexGenerationAdapter(
-        vertex_config(),
-        stream_factory=ScriptedStreamFactory(failure=failure),
-    )
+    adapter = vertex_adapter(ScriptedStreamFactory(failure=failure))
     runtime = ProviderOrchestrator(generation=adapter)
 
     with caplog.at_level(logging.WARNING, logger="rag_providers.vertex"):
@@ -278,7 +308,7 @@ def test_maps_client_initialization_credentials_failure(
 @pytest.mark.anyio
 async def test_rejects_over_budget_prompt_before_vertex_call() -> None:
     factory = ScriptedStreamFactory(successful_responses())
-    adapter = VertexGenerationAdapter(vertex_config(), stream_factory=factory)
+    adapter = vertex_adapter(factory, token_counter=ScriptedTokenCounter(total_tokens=3))
     runtime = ProviderOrchestrator(generation=adapter)
     request = GenerationRequest(
         prompt="one two three",
@@ -293,6 +323,46 @@ async def test_rejects_over_budget_prompt_before_vertex_call() -> None:
         await runtime.generate(request)
 
     assert raised.value.code is ProviderErrorCode.INVALID_REQUEST
+    assert factory.calls == []
+
+
+@pytest.mark.anyio
+async def test_model_count_rejects_over_budget_prompt_without_whitespace() -> None:
+    factory = ScriptedStreamFactory(successful_responses())
+    token_counter = ScriptedTokenCounter(total_tokens=100)
+    adapter = vertex_adapter(factory, token_counter=token_counter)
+
+    with pytest.raises(ProviderAdapterError) as raised:
+        await ProviderOrchestrator(generation=adapter).generate(generation_request("無空格" * 100))
+
+    assert raised.value.code is ProviderErrorCode.INVALID_REQUEST
+    assert token_counter.calls == [("gemini-test", "無空格" * 100)]
+    assert factory.calls == []
+
+
+@pytest.mark.anyio
+async def test_maps_token_count_failure_before_generation() -> None:
+    factory = ScriptedStreamFactory(successful_responses())
+    token_counter = ScriptedTokenCounter(failure=api_error(429))
+    adapter = vertex_adapter(factory, token_counter=token_counter)
+
+    with pytest.raises(ProviderAdapterError) as raised:
+        await ProviderOrchestrator(generation=adapter).generate(generation_request())
+
+    assert raised.value.code is ProviderErrorCode.RATE_LIMITED
+    assert raised.value.retryable is True
+    assert factory.calls == []
+
+
+@pytest.mark.anyio
+async def test_missing_model_token_count_is_a_safe_terminal_error() -> None:
+    factory = ScriptedStreamFactory(successful_responses())
+    adapter = vertex_adapter(factory, token_counter=ScriptedTokenCounter(None))
+
+    with pytest.raises(ProviderAdapterError) as raised:
+        await ProviderOrchestrator(generation=adapter).generate(generation_request())
+
+    assert raised.value.code is ProviderErrorCode.INVALID_RESPONSE
     assert factory.calls == []
 
 
@@ -319,10 +389,7 @@ async def test_missing_text_or_usage_is_a_safe_terminal_error() -> None:
     )
 
     for responses in scenarios:
-        adapter = VertexGenerationAdapter(
-            vertex_config(),
-            stream_factory=ScriptedStreamFactory(responses),
-        )
+        adapter = vertex_adapter(ScriptedStreamFactory(responses))
         runtime = ProviderOrchestrator(generation=adapter)
         with pytest.raises(ProviderAdapterError) as raised:
             await runtime.generate(generation_request())
@@ -340,6 +407,7 @@ async def test_close_callback_releases_owned_client_resources() -> None:
     adapter = VertexGenerationAdapter(
         vertex_config(),
         stream_factory=ScriptedStreamFactory(successful_responses()),
+        token_counter=ScriptedTokenCounter(),
         close_callback=close,
     )
 
@@ -350,10 +418,7 @@ async def test_close_callback_releases_owned_client_resources() -> None:
 
 @pytest.mark.anyio
 async def test_raw_adapter_event_order_matches_generation_contract() -> None:
-    adapter = VertexGenerationAdapter(
-        vertex_config(),
-        stream_factory=ScriptedStreamFactory(successful_responses()),
-    )
+    adapter = vertex_adapter(ScriptedStreamFactory(successful_responses()))
 
     events = [event async for event in adapter.generate(generation_request())]
 

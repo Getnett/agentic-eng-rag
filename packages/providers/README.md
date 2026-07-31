@@ -32,6 +32,11 @@ zero cost.
 
 The deterministic adapter and API smoke-boundary tests make no network calls:
 
+Before generation, the adapter asks the configured Vertex model to count the
+prompt tokens. This model-aware count enforces the hard input budget even for
+text without whitespace; the orchestration timeout covers both counting and the
+subsequent stream.
+
 ```sh
 mise run test:vertex
 ```
