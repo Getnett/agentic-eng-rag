@@ -1,6 +1,9 @@
 project_id = "replace-with-development-project-id"
 region     = "europe-west1"
 
+# Model selection is non-secret and remains configurable for regional availability.
+vertex_generation_model = "gemini-2.5-flash-lite"
+
 # Immutable GitHub IDs protect workload federation from repository/owner renames.
 github_repository          = "OWNER/REPOSITORY"
 github_repository_id       = "NUMERIC_REPOSITORY_ID"

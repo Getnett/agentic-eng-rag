@@ -44,6 +44,8 @@ Both dependency managers use committed lockfiles. `bootstrap` fails rather than 
 | `mise run test:admin-auth`   | Test JWT verification and administrator subject mapping.   |
 | `mise run test:providers`    | Test provider adapter contracts and deterministic fakes.   |
 | `mise run providers:example` | Swap fake adapters through provider-neutral orchestration. |
+| `mise run test:vertex`       | Test Vertex generation and its restricted smoke boundary.  |
+| `mise run vertex:smoke`      | Run the explicit, billed live Vertex streaming smoke.      |
 
 ## Database migrations
 
@@ -140,6 +142,27 @@ literal role `admin`. The second call returns a safe `401` envelope. Never commi
 the config, database URL, access token, publishable key, email, or password.
 Development Cloud Run configuration and Secret Manager delivery are documented
 in [`infra/terraform/README.md`](infra/terraform/README.md).
+
+## Verify Vertex generation
+
+The development API uses the Google Gen AI SDK in Vertex mode and authenticates
+with its attached Cloud Run service identity. Terraform supplies only the
+non-secret project, `europe-west1` location, and configured model ID; no provider
+API key is needed. Run deterministic tests with `mise run test:vertex`.
+
+After applying the reviewed Terraform change and deploying the merged API image,
+an authenticated administrator can invoke the development-only streaming probe:
+
+```sh
+curl --no-buffer --fail-with-body \
+  --request POST \
+  --header "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+  "${API_URL}/admin/ai/vertex-generation-smoke"
+```
+
+The probe has a fixed support prompt, is absent outside development, and logs
+only safe provider/model/location, token, cost-estimate, and normalized status
+metadata. It is not the public chat endpoint.
 
 ## Workspace layout
 

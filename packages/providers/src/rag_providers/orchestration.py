@@ -30,7 +30,7 @@ class ProviderOrchestrator:
         self,
         *,
         generation: GenerationAdapter,
-        embedding: EmbeddingAdapter,
+        embedding: EmbeddingAdapter | None = None,
     ) -> None:
         self._generation = generation
         self._embedding = embedding
@@ -91,6 +91,13 @@ class ProviderOrchestrator:
         return GenerationResult(text="".join(chunks), metadata=metadata)
 
     async def embed(self, request: EmbeddingRequest) -> EmbeddingResult:
+        if self._embedding is None:
+            raise ProviderAdapterError(
+                code=ProviderErrorCode.UNSUPPORTED_ROLE,
+                message="No provider model is configured for the embedding role.",
+                provider_id="unconfigured",
+                model_id="unconfigured",
+            )
         capabilities = self._require_role(self._embedding.capabilities, ProviderRole.EMBEDDING)
         try:
             async with asyncio.timeout(request.budget.timeout_seconds):

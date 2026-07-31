@@ -21,9 +21,9 @@ managed here.
 - separate API, admin, worker, and migration runtime service accounts;
 - separate keyless GitHub image-publisher and development-deployer service
   accounts;
-- narrowly scoped project IAM bindings for runtime logging, monitoring, and
-  Cloud SQL, plus resource-scoped Storage, Secret Manager, and Cloud Tasks
-  access; and
+- narrowly scoped project IAM bindings for runtime logging, monitoring, Cloud
+  SQL, and Vertex invocation for the API identity only, plus resource-scoped
+  Storage, Secret Manager, and Cloud Tasks access; and
 - required Google APIs.
 
 Resources that support labels receive `application=rag-support-chatbot`,
@@ -130,6 +130,12 @@ Manual verification:
    repository, while the deployer can read it, update Cloud Run, and act only as
    the API and migration runtime identities.
 9. Re-run `plan`; expect no changes.
+
+The API receives `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, and
+`VERTEX_GENERATION_MODEL` as non-secret environment values. Its dedicated service
+account alone receives `roles/aiplatform.user`; no provider API key or static
+service-account key is used. The default development model is configurable in
+`dev.tfvars` because model availability and lifecycle vary by region.
 
 ## 4. Build and configure the migration job
 
@@ -254,6 +260,20 @@ The first call returns one stable local administrator mapping. The second return
 a generic `401` response. Do not paste the access token, email, password, or
 Secret Manager payload into Terraform, source control, command logs, or issue
 comments.
+
+With the same access token, verify the development-only Vertex streaming probe:
+
+```sh
+curl --no-buffer --fail-with-body \
+  --request POST \
+  --header "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+  "${API_URL}/admin/ai/vertex-generation-smoke"
+```
+
+The endpoint uses one fixed, non-sensitive support prompt and is unavailable when
+`APP_ENVIRONMENT` is not `dev`. Cloud Run logs must show safe provider, model,
+location, token-count, cost-estimate, and terminal-status metadata without prompt
+text, credentials, authorization headers, or raw SDK errors.
 
 ## 7. Configure keyless GitHub delivery
 

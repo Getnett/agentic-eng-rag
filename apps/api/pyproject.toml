@@ -14,6 +14,7 @@ api = [
     "fastapi[standard-no-fastapi-cloud-cli]==0.141.1",
     "httpx==0.28.1",
     "pyjwt[crypto]==2.10.1",
+    "rag-provider-adapters",
 ]
 migrations = [
     "alembic==1.18.5",
@@ -23,6 +24,9 @@ migrations = [
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+rag-provider-adapters = { workspace = true }
 
 [tool.fastapi]
 entrypoint = "rag_api.main:app"

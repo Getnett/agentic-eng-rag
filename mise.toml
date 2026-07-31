@@ -103,6 +103,14 @@ run = "uv run pytest packages/providers/tests"
 description = "Verify provider-neutral orchestration by swapping fake adapters"
 run = "uv run python packages/providers/examples/swap_fake_provider.py"
 
+[tasks."test:vertex"]
+description = "Run deterministic Vertex adapter and restricted smoke-endpoint tests"
+run = "uv run pytest packages/providers/tests/test_vertex.py apps/api/tests/test_vertex_smoke.py"
+
+[tasks."vertex:smoke"]
+description = "Run the explicit, billed Vertex streaming smoke script"
+run = "uv run python packages/providers/examples/stream_vertex.py"
+
 [tasks."db:migrate"]
 description = "Upgrade the configured PostgreSQL database to the migration head"
 env = { PYTHONPATH = "apps/api/src" }

@@ -25,9 +25,13 @@ run "development_plan" {
     condition = (
       google_sql_user.api.type == "CLOUD_IAM_SERVICE_ACCOUNT" &&
       contains(local.runtime_project_roles["api"], "roles/cloudsql.client") &&
-      contains(local.runtime_project_roles["api"], "roles/cloudsql.instanceUser")
+      contains(local.runtime_project_roles["api"], "roles/cloudsql.instanceUser") &&
+      contains(local.runtime_project_roles["api"], "roles/aiplatform.user") &&
+      !contains(local.runtime_project_roles["admin"], "roles/aiplatform.user") &&
+      !contains(local.runtime_project_roles["migration"], "roles/aiplatform.user") &&
+      !contains(local.runtime_project_roles["worker"], "roles/aiplatform.user")
     )
-    error_message = "The API must use its own passwordless Cloud SQL IAM database identity."
+    error_message = "The API must use its own Cloud SQL identity and be the only runtime allowed to invoke Vertex generation."
   }
 
   assert {
@@ -43,9 +47,24 @@ run "development_plan" {
       contains(
         google_cloud_run_v2_service.runtime["api"].template[0].containers[0].env[*].name,
         "DB_USER",
-      )
+      ) &&
+      one([
+        for environment in google_cloud_run_v2_service.runtime["api"].template[0].containers[0].env :
+        environment.value == "rag-dev-example"
+        if environment.name == "GOOGLE_CLOUD_PROJECT"
+      ]) &&
+      one([
+        for environment in google_cloud_run_v2_service.runtime["api"].template[0].containers[0].env :
+        environment.value == "europe-west1"
+        if environment.name == "GOOGLE_CLOUD_LOCATION"
+      ]) &&
+      one([
+        for environment in google_cloud_run_v2_service.runtime["api"].template[0].containers[0].env :
+        environment.value == "gemini-2.5-flash-lite"
+        if environment.name == "VERTEX_GENERATION_MODEL"
+      ])
     )
-    error_message = "The API must receive non-secret Cloud SQL connection identifiers."
+    error_message = "The API must receive non-secret Cloud SQL and Vertex routing identifiers."
   }
 
   assert {

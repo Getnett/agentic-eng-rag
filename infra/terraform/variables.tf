@@ -14,6 +14,20 @@ variable "region" {
   default     = "europe-west1"
 }
 
+variable "vertex_generation_model" {
+  description = "Vertex Gemini model ID used by the development generation adapter."
+  type        = string
+  default     = "gemini-2.5-flash-lite"
+
+  validation {
+    condition = (
+      length(trimspace(var.vertex_generation_model)) > 0 &&
+      !strcontains(var.vertex_generation_model, " ")
+    )
+    error_message = "vertex_generation_model must be a nonblank model ID without spaces."
+  }
+}
+
 variable "environment" {
   description = "Environment label. The current Terraform root provisions development only."
   type        = string

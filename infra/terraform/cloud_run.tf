@@ -34,6 +34,9 @@ resource "google_cloud_run_v2_service" "runtime" {
             google_service_account.runtime["api"].email,
             ".gserviceaccount.com",
           )
+          GOOGLE_CLOUD_PROJECT    = var.project_id
+          GOOGLE_CLOUD_LOCATION   = var.region
+          VERTEX_GENERATION_MODEL = var.vertex_generation_model
         } : {}
 
         content {

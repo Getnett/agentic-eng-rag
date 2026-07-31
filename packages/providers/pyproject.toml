@@ -3,7 +3,10 @@ name = "rag-provider-adapters"
 version = "0.1.0"
 description = "Provider-neutral model adapter contracts and deterministic test doubles."
 requires-python = "==3.13.*"
-dependencies = []
+dependencies = [
+  "google-genai==2.16.0",
+  "httpx==0.28.1",
+]
 
 [build-system]
 requires = ["uv_build==0.11.30"]
