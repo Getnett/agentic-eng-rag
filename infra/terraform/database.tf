@@ -73,3 +73,15 @@ resource "google_sql_user" "migration" {
 
   depends_on = [google_project_iam_member.runtime]
 }
+
+resource "google_sql_user" "api" {
+  name = trimsuffix(
+    google_service_account.runtime["api"].email,
+    ".gserviceaccount.com",
+  )
+  project  = var.project_id
+  instance = google_sql_database_instance.primary.name
+  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
+
+  depends_on = [google_project_iam_member.runtime]
+}

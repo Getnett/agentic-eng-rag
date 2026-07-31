@@ -144,9 +144,25 @@ variable "secret_names" {
 
   validation {
     condition = (
+      contains(var.secret_names, "application-auth-secret") &&
       contains(var.secret_names, "model-provider-api-key") &&
       alltrue([for name in var.secret_names : can(regex("^[a-z][a-z0-9-]{0,253}[a-z0-9]$", name))])
     )
-    error_message = "secret_names must contain model-provider-api-key and only valid Secret Manager secret IDs."
+    error_message = "secret_names must contain application-auth-secret and model-provider-api-key, using only valid Secret Manager secret IDs."
+  }
+}
+
+variable "supabase_auth_secret_version" {
+  description = "Optional immutable numeric version of the application-auth-secret payload mounted by the API."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition = (
+      var.supabase_auth_secret_version == null ||
+      can(regex("^[1-9][0-9]*$", var.supabase_auth_secret_version))
+    )
+    error_message = "supabase_auth_secret_version must be null or an immutable positive numeric Secret Manager version."
   }
 }

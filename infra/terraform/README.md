@@ -2,22 +2,22 @@
 
 This directory owns the reproducible GCP development environment. Terraform
 bootstraps API, admin, and worker services with Google's public hello container;
-the deployment pipeline then owns their image revisions. POR-34 adds the
-health-only API delivery path and keyless GitHub identities. No production
-resources are managed here.
+the deployment pipeline then owns their image revisions. The API exposes public
+health plus the POR-36 authenticated admin boundary. No production resources are
+managed here.
 
 ## What is created
 
 - a custom VPC, serverless subnet, and private service connection;
 - one private-IP PostgreSQL Cloud SQL instance and application database;
-- Cloud SQL IAM database authentication and a dedicated migration database user;
+- Cloud SQL IAM database authentication with isolated migration and API users;
 - one private Artifact Registry Docker repository with immutable tags;
 - one private, versioned raw-source Cloud Storage bucket;
 - API, admin, and worker Cloud Run v2 services with direct VPC egress; only the
-  health-only API is publicly callable in M0;
+  API is publicly callable, while `/admin/*` performs application authentication;
 - an optional, digest-pinned Cloud Run migration job with direct VPC egress;
 - one Cloud Tasks queue;
-- empty Secret Manager containers (never secret versions or payloads);
+- empty Secret Manager containers (Terraform never manages versions or payloads);
 - separate API, admin, worker, and migration runtime service accounts;
 - separate keyless GitHub image-publisher and development-deployer service
   accounts;
@@ -121,10 +121,11 @@ Manual verification:
 5. Confirm API and worker service accounts are different, neither has Owner or
    Editor, their project roles match `locals.tf`, and Storage, Secret Manager,
    and Cloud Tasks access is bound directly to the respective resource.
-6. Confirm Secret Manager contains metadata only and Terraform created no secret
-   versions.
-7. Confirm the migration service account has Cloud SQL Client and Cloud SQL
-   Instance User, but no Secret Manager access.
+6. Confirm Terraform created no Secret Manager versions. Operator-added versions
+   are allowed only through the documented secret-delivery procedure.
+7. Confirm the migration and API service accounts have Cloud SQL Client and
+   Instance User, use different IAM database users, and only the API has access
+   to the application-auth secret.
 8. Confirm the CI publisher can only write the managed Artifact Registry
    repository, while the deployer can read it, update Cloud Run, and act only as
    the API and migration runtime identities.
@@ -182,8 +183,8 @@ gcloud run jobs execute rag-dev-migrate --region=europe-west1 --wait
 ```
 
 Each successful execution logs only the Alembic revision, pgvector extension
-version, and a harmless vector-cast probe. Both runs must report
-`0001_enable_pgvector`; the second run must apply no revision. Inspect job logs
+version, and a harmless vector-cast probe. Both runs must report the repository's
+current migration head; the second run must apply no revision. Inspect job logs
 or Cloud SQL Studio and confirm:
 
 ```sql
@@ -195,7 +196,66 @@ SELECT '[1,2,3]'::vector;
 Finally, confirm the Cloud SQL instance is `RUNNABLE`, the latest two job
 executions succeeded, and another Terraform plan reports no changes.
 
-## 6. Configure keyless GitHub delivery
+## 6. Configure Supabase administrator verification
+
+Use a hosted Supabase project with an asymmetric JWT signing key. The API fetches
+and caches the project's public JWKS and does not require a service-role key or
+legacy shared JWT secret.
+
+Create a local untracked JSON file containing only:
+
+```json
+{
+  "project_url": "https://PROJECT_REF.supabase.co",
+  "audience": "authenticated",
+  "jwks_cache_ttl_seconds": 600
+}
+```
+
+Validate it, add it to the existing Terraform-managed secret container, and
+remove the local file:
+
+```sh
+jq -e \
+  '.project_url | startswith("https://")' \
+  supabase-auth-config.json
+gcloud secrets versions add rag-dev-application-auth-secret \
+  --data-file=supabase-auth-config.json
+rm supabase-auth-config.json
+```
+
+Record the immutable numeric version returned by Secret Manager in the ignored
+development variables file:
+
+```hcl
+supabase_auth_secret_version = "NUMERIC_VERSION"
+```
+
+Review and apply Terraform. The API receives the JSON through
+`SUPABASE_AUTH_CONFIG`, receives only non-secret Cloud SQL identifiers as ordinary
+environment values, and connects with its dedicated passwordless service
+identity. The migration job grants that database identity only `USAGE` on
+`rag_app` plus `SELECT`/`INSERT` on `rag_app.admin_user`.
+
+After deploying the merged API image, obtain a short-lived access token from a
+development email/password session and call:
+
+```sh
+export API_URL='Terraform cloud_run_service_uris.api output'
+export SUPABASE_ACCESS_TOKEN='short-lived development access token'
+curl --fail-with-body \
+  --header "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+  "${API_URL}/admin/auth-check"
+curl --include "${API_URL}/admin/auth-check"
+unset SUPABASE_ACCESS_TOKEN
+```
+
+The first call returns one stable local administrator mapping. The second returns
+a generic `401` response. Do not paste the access token, email, password, or
+Secret Manager payload into Terraform, source control, command logs, or issue
+comments.
+
+## 7. Configure keyless GitHub delivery
 
 Terraform creates a GitHub OIDC provider restricted to the repository's
 immutable numeric repository and owner IDs. The provider derives a

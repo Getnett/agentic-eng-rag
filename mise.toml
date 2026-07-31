@@ -113,6 +113,14 @@ uv run pytest \
   apps/api/tests/test_core_schema_migration_integration.py
 """
 
+[tasks."test:admin-auth"]
+description = "Test Supabase JWT verification and database-backed admin mapping"
+run = """
+uv run pytest \
+  apps/api/tests/test_auth.py \
+  apps/api/tests/test_admin_auth_integration.py
+"""
+
 [tasks."db:schema-probe"]
 description = "Migrate and probe the core schema in disposable pgvector PostgreSQL"
 run = """
@@ -181,7 +189,9 @@ port="$(docker port "$container_id" 8080/tcp | sed 's/.*://')"
 for attempt in $(seq 1 20); do
   if response="$(curl --fail --silent --show-error "http://127.0.0.1:${port}/health" 2>/dev/null)" &&
     printf '%s' "$response" |
-      uv run python -c 'import json, sys; data=json.load(sys.stdin); assert data["status"] == "ok" and data["source_revision"] == "local"'; then
+      uv run python -c 'import json, sys; data=json.load(sys.stdin); assert data["status"] == "ok" and data["source_revision"] == "local"' &&
+    auth_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:${port}/admin/auth-check")" &&
+    [ "$auth_status" = "401" ]; then
     exit 0
   fi
   if [ "$attempt" -eq 20 ]; then

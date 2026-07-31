@@ -1,7 +1,8 @@
 mock_provider "google" {}
 
 variables {
-  project_id = "rag-dev-example"
+  project_id                   = "rag-dev-example"
+  supabase_auth_secret_version = "7"
 }
 
 override_resource {
@@ -18,6 +19,42 @@ run "development_plan" {
   assert {
     condition     = google_storage_bucket.raw_sources.uniform_bucket_level_access
     error_message = "The raw-source bucket must enforce uniform bucket-level access."
+  }
+
+  assert {
+    condition = (
+      google_sql_user.api.type == "CLOUD_IAM_SERVICE_ACCOUNT" &&
+      contains(local.runtime_project_roles["api"], "roles/cloudsql.client") &&
+      contains(local.runtime_project_roles["api"], "roles/cloudsql.instanceUser")
+    )
+    error_message = "The API must use its own passwordless Cloud SQL IAM database identity."
+  }
+
+  assert {
+    condition = (
+      contains(
+        google_cloud_run_v2_service.runtime["api"].template[0].containers[0].env[*].name,
+        "INSTANCE_CONNECTION_NAME",
+      ) &&
+      contains(
+        google_cloud_run_v2_service.runtime["api"].template[0].containers[0].env[*].name,
+        "DB_NAME",
+      ) &&
+      contains(
+        google_cloud_run_v2_service.runtime["api"].template[0].containers[0].env[*].name,
+        "DB_USER",
+      )
+    )
+    error_message = "The API must receive non-secret Cloud SQL connection identifiers."
+  }
+
+  assert {
+    condition = one([
+      for environment in google_cloud_run_v2_service.runtime["api"].template[0].containers[0].env :
+      environment.value_source[0].secret_key_ref[0].version == "7"
+      if environment.name == "SUPABASE_AUTH_CONFIG"
+    ])
+    error_message = "Supabase verification config must use one immutable Secret Manager version."
   }
 
   assert {
@@ -130,7 +167,7 @@ run "development_plan" {
       google_sql_user.migration.database_roles == tolist(["cloudsqlsuperuser"]) &&
       length("${local.name_prefix}-migration@${var.project_id}.iam") <= 63
     )
-    error_message = "The migration database user must use IAM, fit PostgreSQL's identifier limit, and have only the extension-management role."
+    error_message = "The migration database user must use IAM, fit PostgreSQL's identifier limit, and keep only the extension-management role."
   }
 
   assert {
@@ -223,9 +260,14 @@ run "migration_job_plan" {
   assert {
     condition = (
       google_cloud_run_v2_job.migration[0].template[0].task_count == 1 &&
-      google_cloud_run_v2_job.migration[0].template[0].template[0].max_retries == 0
+      google_cloud_run_v2_job.migration[0].template[0].template[0].max_retries == 0 &&
+      one([
+        for environment in google_cloud_run_v2_job.migration[0].template[0].template[0].containers[0].env :
+        environment.name == "APP_DB_USER"
+        if environment.name == "APP_DB_USER"
+      ])
     )
-    error_message = "The migration job must execute once without automatic retries."
+    error_message = "The migration job must execute once and grant only the configured API database user."
   }
 
   assert {

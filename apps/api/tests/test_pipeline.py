@@ -73,6 +73,7 @@ def test_main_publication_builds_images_after_verification() -> None:
     assert 'case "${migration_lookup_status}" in' in publish_source
     assert 'exit "${api_lookup_status}"' in publish_source
     assert 'exit "${migration_lookup_status}"' in publish_source
+    assert '--build-arg "APP_REVISION=${GITHUB_SHA}"' in publish_source
     assert publish_source.count("lookup_image_digest") == 5
     assert publish_source.count("verify_image_digest") == 5
 
@@ -93,10 +94,8 @@ def test_development_deployment_is_approval_gated_and_smoke_tested() -> None:
     assert names.index("Verify Google Cloud impersonation") < names.index(
         "Resolve immutable image digests"
     )
-    assert names.index("Run database migrations") < names.index("Deploy health-only API")
-    assert names.index("Deploy health-only API") < names.index(
-        "Smoke test deployed health endpoint"
-    )
+    assert names.index("Run database migrations") < names.index("Deploy API")
+    assert names.index("Deploy API") < names.index("Smoke test deployed health endpoint")
     assert "Record deployment metadata" in names
     assert "Retain deployment evidence" in names
     impersonation_step = next(

@@ -76,3 +76,39 @@ def test_baseline_upgrade_is_idempotent_and_reversible(
     restored_result = upgrade(settings)
     assert restored_result.revision == HEAD_REVISION
     engine.dispose()
+
+
+def test_upgrade_grants_only_required_admin_mapping_access(
+    postgres_database_url: str,
+) -> None:
+    role = "por36-api"
+    engine = create_engine(postgres_database_url)
+    with engine.begin() as connection:
+        connection.execute(text(f'DROP ROLE IF EXISTS "{role}"'))
+        connection.execute(text(f'CREATE ROLE "{role}" NOLOGIN'))
+
+    try:
+        upgrade(
+            MigrationSettings(
+                database_url=postgres_database_url,
+                application_database_user=role,
+            )
+        )
+        with engine.connect() as connection:
+            assert connection.execute(
+                text("SELECT has_schema_privilege(:role, 'rag_app', 'USAGE')"),
+                {"role": role},
+            ).scalar_one()
+            assert connection.execute(
+                text("SELECT has_table_privilege(:role, 'rag_app.admin_user', 'SELECT,INSERT')"),
+                {"role": role},
+            ).scalar_one()
+            assert not connection.execute(
+                text("SELECT has_table_privilege(:role, 'rag_app.source_document', 'INSERT')"),
+                {"role": role},
+            ).scalar_one()
+    finally:
+        with engine.begin() as connection:
+            connection.execute(text(f'DROP OWNED BY "{role}"'))
+            connection.execute(text(f'DROP ROLE "{role}"'))
+        engine.dispose()

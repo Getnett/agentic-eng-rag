@@ -10,6 +10,7 @@ from rag_api.migrations import (
 from sqlalchemy import create_engine, text
 
 EXPECTED_TABLES = {
+    "admin_user",
     "alembic_version",
     "chunk",
     "conversation",
@@ -33,6 +34,7 @@ EXPECTED_ENUM_VALUES = {
     ],
 }
 REQUIRED_CONSTRAINTS = {
+    "ck_admin_user_single_role",
     "ck_chunk_embedding_dimension",
     "ck_chunk_heading",
     "ck_chunk_metadata_object",
@@ -59,6 +61,7 @@ REQUIRED_CONSTRAINTS = {
     "fk_retrieval_trace_chunk_chunk",
     "fk_source_document_active_version",
     "uq_retrieval_trace_request_id",
+    "uq_admin_user_supabase_user_id",
     "uq_source_version_document_number",
 }
 REQUIRED_INDEXES = {

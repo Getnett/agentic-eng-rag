@@ -50,6 +50,7 @@ locals {
     ])
     api = toset([
       "roles/cloudsql.client",
+      "roles/cloudsql.instanceUser",
       "roles/logging.logWriter",
       "roles/monitoring.metricWriter",
     ])

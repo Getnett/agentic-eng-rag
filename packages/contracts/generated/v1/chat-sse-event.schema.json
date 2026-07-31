@@ -342,6 +342,7 @@
                   "type": "string",
                   "enum": [
                     "INVALID_REQUEST",
+                    "AUTHENTICATION_REQUIRED",
                     "UNAUTHORIZED_WIDGET",
                     "ORIGIN_NOT_ALLOWED",
                     "RATE_LIMITED",

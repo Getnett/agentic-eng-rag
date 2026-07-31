@@ -119,6 +119,39 @@ class TimestampMixin:
     )
 
 
+class AdminUser(Base):
+    """One verified Supabase subject with the sole v1 administrator role."""
+
+    __tablename__ = "admin_user"
+    __table_args__ = (
+        CheckConstraint("role = 'admin'", name="ck_admin_user_single_role"),
+        UniqueConstraint(
+            "supabase_user_id",
+            name="uq_admin_user_supabase_user_id",
+        ),
+        {"schema": APPLICATION_SCHEMA},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=sa.text("gen_random_uuid()"),
+    )
+    supabase_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    role: Mapped[str] = mapped_column(
+        Text,
+        default="admin",
+        server_default=sa.text("'admin'"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=sa.text("statement_timestamp()"),
+        nullable=False,
+    )
+
+
 class Widget(TimestampMixin, Base):
     """Public widget configuration without storing the public key itself."""
 

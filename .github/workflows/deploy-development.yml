@@ -110,7 +110,7 @@ jobs:
           test -n "${execution}"
           printf 'execution=%s\n' "${execution}" >>"${GITHUB_OUTPUT}"
 
-      - name: Deploy health-only API
+      - name: Deploy API
         id: service
         env:
           API_IMAGE: ${{ steps.images.outputs.api_image }}
