@@ -42,27 +42,35 @@ class ProviderOrchestrator:
         capabilities = self._require_role(self._generation.capabilities, ProviderRole.GENERATION)
         complete_seen = False
         delta_seen = False
-        try:
-            async with asyncio.timeout(request.budget.timeout_seconds):
-                async for event in self._generation.generate(request):
-                    if complete_seen:
-                        raise self._protocol_error(
-                            capabilities, "generation completed more than once"
-                        )
-                    if isinstance(event, GenerationComplete):
-                        self._validate_metadata(
-                            event.metadata, capabilities, request.budget.timeout_seconds
-                        )
-                        complete_seen = True
-                    elif not isinstance(event, GenerationDelta):
-                        raise self._protocol_error(
-                            capabilities, "generation returned an unknown event"
-                        )
-                    else:
-                        delta_seen = True
-                    yield event
-        except TimeoutError as error:
-            raise self._timeout_error(capabilities) from error
+        provider_events = self._generation.generate(request).__aiter__()
+        remaining_provider_seconds = request.budget.timeout_seconds
+        loop = asyncio.get_running_loop()
+        while True:
+            if remaining_provider_seconds <= 0:
+                raise self._timeout_error(capabilities)
+            started_at = loop.time()
+            try:
+                async with asyncio.timeout(remaining_provider_seconds):
+                    event = await anext(provider_events)
+            except StopAsyncIteration:
+                break
+            except TimeoutError as error:
+                raise self._timeout_error(capabilities) from error
+            finally:
+                remaining_provider_seconds -= loop.time() - started_at
+
+            if complete_seen:
+                raise self._protocol_error(capabilities, "generation completed more than once")
+            if isinstance(event, GenerationComplete):
+                self._validate_metadata(
+                    event.metadata, capabilities, request.budget.timeout_seconds
+                )
+                complete_seen = True
+            elif not isinstance(event, GenerationDelta):
+                raise self._protocol_error(capabilities, "generation returned an unknown event")
+            else:
+                delta_seen = True
+            yield event
         if not complete_seen:
             raise self._protocol_error(
                 capabilities, "generation did not return completion metadata"

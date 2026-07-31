@@ -182,6 +182,26 @@ async def test_runtime_maps_deadline_expiry_to_retryable_timeout() -> None:
     assert raised.value.retryable is True
 
 
+@pytest.mark.anyio
+async def test_consumer_backpressure_does_not_consume_provider_timeout() -> None:
+    runtime = orchestrator()
+    request = GenerationRequest(
+        prompt="healthy stream",
+        budget=RequestBudget(
+            timeout_seconds=0.01,
+            max_input_tokens=4,
+            max_output_tokens=8,
+        ),
+    )
+    events: list[GenerationEvent] = []
+
+    async for event in runtime.stream_generation(request):
+        events.append(event)
+        await asyncio.sleep(0.02)
+
+    assert isinstance(events[-1], GenerationComplete)
+
+
 class MissingCompletionAdapter:
     @property
     def capabilities(self) -> ProviderCapabilities:
