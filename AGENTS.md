@@ -56,6 +56,7 @@ workflow below:
 - `apps/admin`: Next.js/React admin portal.
 - `packages/widget`: script-loaded React custom element and Shadow DOM styles.
 - `packages/contracts`: shared API and SSE contracts.
+- `packages/providers`: provider-neutral Python adapter contracts and deterministic fakes.
 - `infra/terraform`: Terraform-managed GCP infrastructure.
 
 Keep provider SDK details behind adapters and prevent browser packages from accessing databases, model providers, or secrets directly.

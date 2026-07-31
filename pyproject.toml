@@ -15,7 +15,7 @@ dev = [
 package = false
 
 [tool.uv.workspace]
-members = ["apps/api", "apps/worker"]
+members = ["apps/api", "apps/worker", "packages/providers"]
 
 [tool.ruff]
 line-length = 100
@@ -31,5 +31,5 @@ warn_unreachable = true
 
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib --strict-config --strict-markers"
-pythonpath = ["apps/api/src", "apps/worker/src"]
-testpaths = ["apps/api/tests", "apps/worker/tests"]
+pythonpath = ["apps/api/src", "apps/worker/src", "packages/providers/src"]
+testpaths = ["apps/api/tests", "apps/worker/tests", "packages/providers/tests"]
