@@ -5,6 +5,7 @@ import { RequestIdSchema } from "./identifiers.js";
 
 export const PublicErrorCodeSchema = z.enum([
   "INVALID_REQUEST",
+  "AUTHENTICATION_REQUIRED",
   "UNAUTHORIZED_WIDGET",
   "ORIGIN_NOT_ALLOWED",
   "RATE_LIMITED",

@@ -247,10 +247,9 @@ async def test_absent_and_invalid_tokens_return_the_same_safe_401_shape(
         assert payload["contract_version"] == "v1"
         assert uuid.UUID(payload["request_id"])
         assert payload["error"] == {
-            "code": ("AUTHENTICATION_REQUIRED" if response is absent else "INVALID_ACCESS_TOKEN"),
+            "code": "AUTHENTICATION_REQUIRED",
             "message": "Authentication credentials could not be validated.",
             "retryable": False,
-            "details": [],
         }
         assert all(invalid_token not in response.text for invalid_token in invalid_tokens)
         assert "expired" not in response.text.lower()
@@ -295,10 +294,9 @@ async def test_jwks_outage_returns_safe_retryable_503() -> None:
 
     assert response.status_code == 503
     assert response.json()["error"] == {
-        "code": "AUTHENTICATION_UNAVAILABLE",
+        "code": "SERVICE_UNAVAILABLE",
         "message": "Administrator authentication is temporarily unavailable.",
         "retryable": True,
-        "details": [],
     }
     assert "provider detail" not in response.text
 

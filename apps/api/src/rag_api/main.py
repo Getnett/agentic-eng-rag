@@ -38,6 +38,18 @@ class AdminAuthCheckResponse(BaseModel):
     role: Literal["admin"] = "admin"
 
 
+class PublicError(BaseModel):
+    code: Literal["AUTHENTICATION_REQUIRED", "SERVICE_UNAVAILABLE"]
+    message: str
+    retryable: bool = False
+
+
+class PublicErrorEnvelope(BaseModel):
+    contract_version: Literal["v1"] = "v1"
+    request_id: uuid.UUID
+    error: PublicError
+
+
 class AdminErrorDetail(BaseModel):
     field: str | None
     reason: str
@@ -100,15 +112,29 @@ def create_app(
         _request: Request,
         error: AdminAuthenticationError,
     ) -> JSONResponse:
-        envelope = AdminErrorEnvelope(
-            request_id=uuid.uuid4(),
-            error=AdminError(
-                code=error.code,
-                message=error.message,
-                retryable=error.status_code == 503,
-                details=[],
-            ),
-        )
+        request_id = uuid.uuid4()
+        if error.status_code in {401, 503}:
+            envelope: PublicErrorEnvelope | AdminErrorEnvelope = PublicErrorEnvelope(
+                request_id=request_id,
+                error=PublicError(
+                    code=(
+                        "SERVICE_UNAVAILABLE"
+                        if error.status_code == 503
+                        else "AUTHENTICATION_REQUIRED"
+                    ),
+                    message=error.message,
+                    retryable=error.status_code == 503,
+                ),
+            )
+        else:
+            envelope = AdminErrorEnvelope(
+                request_id=request_id,
+                error=AdminError(
+                    code=error.code,
+                    message=error.message,
+                    details=[],
+                ),
+            )
         headers = {"WWW-Authenticate": "Bearer"} if error.status_code == 401 else None
         return JSONResponse(
             status_code=error.status_code,

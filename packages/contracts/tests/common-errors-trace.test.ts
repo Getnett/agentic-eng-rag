@@ -24,6 +24,12 @@ describe("shared contract schemas", () => {
     expect(
       PublicErrorEnvelopeSchema.safeParse({
         ...publicError,
+        error: { ...publicError.error, code: "AUTHENTICATION_REQUIRED" },
+      }).success,
+    ).toBe(true);
+    expect(
+      PublicErrorEnvelopeSchema.safeParse({
+        ...publicError,
         error: { ...publicError.error, details: [{ field: "question", reason: "missing" }] },
       }).success,
     ).toBe(false);
