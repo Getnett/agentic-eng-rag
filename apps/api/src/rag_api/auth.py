@@ -74,15 +74,21 @@ class SupabaseAuthSettings:
         allowed_fields = {"project_url", "audience", "jwks_cache_ttl_seconds"}
         if set(payload) - allowed_fields:
             raise AuthConfigurationError("SUPABASE_AUTH_CONFIG contains unsupported fields.")
+        project_url = payload.get("project_url")
+        if not isinstance(project_url, str):
+            raise AuthConfigurationError("SUPABASE_AUTH_CONFIG is missing a valid project_url.")
+        audience = payload.get("audience", AUTHENTICATED_ROLE)
+        if not isinstance(audience, str):
+            raise AuthConfigurationError("SUPABASE_AUTH_CONFIG audience must be a nonblank string.")
         try:
             settings = cls(
-                project_url=str(payload["project_url"]),
-                audience=str(payload.get("audience", AUTHENTICATED_ROLE)),
+                project_url=project_url,
+                audience=audience,
                 jwks_cache_ttl_seconds=int(payload.get("jwks_cache_ttl_seconds", 600)),
             )
-        except (KeyError, TypeError, ValueError) as error:
+        except (TypeError, ValueError) as error:
             raise AuthConfigurationError(
-                "SUPABASE_AUTH_CONFIG is missing a valid project_url."
+                "SUPABASE_AUTH_CONFIG contains an invalid JWKS cache TTL."
             ) from error
         settings.validate()
         return settings
@@ -218,6 +224,10 @@ class RemoteJwksProvider:
                 "The token signing keys could not be loaded."
             ) from error
 
+        return self._validated_signing_keys(payload)
+
+    @staticmethod
+    def _validated_signing_keys(payload: Any) -> dict[str, dict[str, Any]]:
         if not isinstance(payload, dict) or not isinstance(payload.get("keys"), list):
             raise TokenVerificationUnavailable("The token signing keys are malformed.")
 
@@ -226,8 +236,29 @@ class RemoteJwksProvider:
             if not isinstance(value, dict):
                 continue
             key_id = value.get("kid")
-            if isinstance(key_id, str) and key_id and value.get("kty") != "oct":
-                keys[key_id] = value
+            algorithm = value.get("alg")
+            key_type = value.get("kty")
+            public_key_use = value.get("use")
+            key_operations = value.get("key_ops")
+            if (
+                not isinstance(key_id, str)
+                or not key_id
+                or not isinstance(algorithm, str)
+                or algorithm not in ALLOWED_JWT_ALGORITHMS
+                or not isinstance(key_type, str)
+                or key_type == "oct"
+                or (public_key_use is not None and public_key_use != "sig")
+                or (
+                    key_operations is not None
+                    and (not isinstance(key_operations, list) or "verify" not in key_operations)
+                )
+            ):
+                continue
+            try:
+                PyJWK.from_dict(value, algorithm=algorithm)
+            except (InvalidTokenError, InvalidKeyError, KeyError, TypeError, ValueError):
+                continue
+            keys[key_id] = value
         if not keys:
             raise TokenVerificationUnavailable("No asymmetric token signing keys are available.")
         return keys

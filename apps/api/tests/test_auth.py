@@ -15,6 +15,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt.algorithms import RSAAlgorithm
 from rag_api.auth import (
     AdminAuthenticationError,
+    AuthConfigurationError,
     InvalidAccessToken,
     RemoteJwksProvider,
     SupabaseAuthSettings,
@@ -230,6 +231,24 @@ async def test_expired_cache_refresh_failures_are_coalesced_and_backed_off() -> 
     assert provider.fetch_count == 2
 
 
+def test_jwks_payload_rejects_malformed_signing_keys(
+    signing_material: tuple[rsa.RSAPrivateKey, dict[str, Any]],
+) -> None:
+    _private_key, public_jwk = signing_material
+    malformed_key = {
+        "kid": "malformed-key",
+        "kty": "RSA",
+        "use": "sig",
+    }
+
+    with pytest.raises(TokenVerificationUnavailable):
+        RemoteJwksProvider._validated_signing_keys({"keys": [malformed_key]})
+
+    assert RemoteJwksProvider._validated_signing_keys({"keys": [malformed_key, public_jwk]}) == {
+        KEY_ID: public_jwk
+    }
+
+
 @pytest.mark.anyio
 @pytest.mark.parametrize(
     ("role", "is_anonymous"),
@@ -351,4 +370,18 @@ def test_auth_config_rejects_non_https_remote_origins(
     )
 
     with pytest.raises(ValueError, match="HTTPS"):
+        SupabaseAuthSettings.from_environment()
+
+
+@pytest.mark.parametrize("audience", [None, 1, True, ["authenticated"]])
+def test_auth_config_rejects_non_string_audience(
+    monkeypatch: pytest.MonkeyPatch,
+    audience: object,
+) -> None:
+    monkeypatch.setenv(
+        "SUPABASE_AUTH_CONFIG",
+        json.dumps({"project_url": PROJECT_URL, "audience": audience}),
+    )
+
+    with pytest.raises(AuthConfigurationError, match="audience"):
         SupabaseAuthSettings.from_environment()
