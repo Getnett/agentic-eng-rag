@@ -38,6 +38,14 @@ resource "google_cloud_run_v2_job" "migration" {
           )
         }
 
+        env {
+          name = "APP_DB_USER"
+          value = trimsuffix(
+            google_service_account.runtime["api"].email,
+            ".gserviceaccount.com",
+          )
+        }
+
         resources {
           limits = {
             cpu    = "1"
@@ -80,5 +88,6 @@ resource "google_cloud_run_v2_job" "migration" {
     google_project_service.required["run.googleapis.com"],
     google_service_networking_connection.private_services,
     google_sql_user.migration,
+    google_sql_user.api,
   ]
 }

@@ -8,9 +8,11 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rag_api.db.models import (
+    AdminUser,
     Chunk,
     Conversation,
     Message,
@@ -32,6 +34,37 @@ class RepositoryEntityNotFound(LookupError):
 
 class IllegalSourceVersionTransition(ValueError):
     """Raised before flushing a source-version transition disallowed by the lifecycle."""
+
+
+class AdminUserRepository:
+    """Idempotently map verified Supabase subjects to the single v1 admin role."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_or_create_by_supabase_user_id(
+        self,
+        supabase_user_id: uuid.UUID,
+    ) -> AdminUser:
+        statement = (
+            insert(AdminUser)
+            .values(supabase_user_id=supabase_user_id, role="admin")
+            .on_conflict_do_nothing(index_elements=[AdminUser.supabase_user_id])
+            .returning(AdminUser)
+        )
+        created = await self._session.scalar(statement)
+        if created is not None:
+            await self._session.flush()
+            return created
+
+        existing = await self._session.scalar(
+            select(AdminUser).where(AdminUser.supabase_user_id == supabase_user_id)
+        )
+        if existing is None:
+            raise RepositoryEntityNotFound(
+                f"Administrator mapping for subject {supabase_user_id} was not found."
+            )
+        return existing
 
 
 LEGAL_SOURCE_VERSION_TRANSITIONS: dict[SourceVersionStatus, frozenset[SourceVersionStatus]] = {

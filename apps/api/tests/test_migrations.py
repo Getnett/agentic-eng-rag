@@ -69,6 +69,16 @@ def test_environment_is_not_modified_by_settings(monkeypatch: pytest.MonkeyPatch
     assert dict(os.environ) == before
 
 
+def test_application_database_user_rejects_unsafe_role_names() -> None:
+    settings = MigrationSettings(
+        database_url="postgresql+pg8000://localhost/db",
+        application_database_user='api"; DROP SCHEMA rag_app; --',
+    )
+
+    with pytest.raises(MigrationConfigurationError, match="APP_DB_USER"):
+        settings.validate_application_database_user()
+
+
 def test_root_migration_tasks_expose_api_source_package() -> None:
     with (REPOSITORY_ROOT / "mise.toml").open("rb") as config_file:
         tasks = tomllib.load(config_file)["tasks"]

@@ -37,10 +37,11 @@ Both dependency managers use committed lockfiles. `bootstrap` fails rather than 
 | `mise run typecheck`       | Run TypeScript and Python type checkers.                  |
 | `mise run test`            | Run workspace tests and Terraform validation.             |
 | `mise run check`           | Run every non-mutating quality gate used by CI.           |
-| `mise run test:api-image`  | Build and smoke-test the health-only API container.       |
+| `mise run test:api-image`  | Build and smoke-test the API container health endpoint.   |
 | `mise run db:migrate`      | Upgrade the configured database to the migration head.    |
 | `mise run db:downgrade`    | Downgrade the configured database to the base.            |
 | `mise run db:schema-probe` | Migrate and probe the core schema in disposable Postgres. |
+| `mise run test:admin-auth` | Test JWT verification and administrator subject mapping.  |
 
 ## Database migrations
 
@@ -73,10 +74,10 @@ To inspect the POR-35 core schema through its async repositories, run:
 mise run db:schema-probe
 ```
 
-This command starts the pinned pgvector PostgreSQL image, migrates it to
-`0002_core_schema`, inserts one widget/source/version/chunk/conversation/message/
-trace chain, prints only table row counts, rolls the fixture transaction back,
-verifies every count returned to zero, and removes the container.
+This command starts the pinned pgvector PostgreSQL image, migrates it to the
+current head, inserts one widget/source/version/chunk/conversation/message/trace
+chain, prints only table row counts, rolls the fixture transaction back, verifies
+every count returned to zero, and removes the container.
 
 Cloud execution uses `INSTANCE_CONNECTION_NAME`, `DB_NAME`, and `DB_USER`.
 Terraform supplies these to a passwordless IAM-authenticated Cloud Run job. See
@@ -91,14 +92,52 @@ immutable Artifact Registry repository, and retains a digest manifest.
 
 Development deployment is a separate, manually triggered workflow protected by
 the GitHub `development` environment. It accepts a full commit SHA from `main`,
-resolves both immutable digests, runs the migration job, deploys the health-only
-API revision, calls `/health`, and retains the resulting revision, image, and
+resolves both immutable digests, runs the migration job, deploys the API
+revision, calls `/health`, and retains the resulting revision, image, and
 smoke-test metadata for 90 days.
 
 GitHub authenticates to GCP through short-lived Workload Identity Federation
 credentials. No service-account key or cloud credential belongs in GitHub
 secrets. See [`infra/terraform/README.md`](infra/terraform/README.md) for the
 one-time repository variables, approval gate, and operator procedure.
+
+## Verify Supabase administrator identity
+
+POR-36 verifies hosted Supabase access tokens locally against the project's
+asymmetric JWKS endpoint. The API checks signature, issuer, audience, expiration,
+authenticated role, non-anonymous status, and UUID subject before it creates the
+single `admin` mapping in `rag_app.admin_user`. It never accepts a browser-supplied
+role, a Supabase service-role key, or a legacy shared JWT secret.
+
+The API reads one JSON object from `SUPABASE_AUTH_CONFIG`:
+
+```json
+{
+  "project_url": "https://PROJECT_REF.supabase.co",
+  "audience": "authenticated",
+  "jwks_cache_ttl_seconds": 600
+}
+```
+
+For local verification, migrate a disposable database, use an asyncpg
+`DATABASE_URL`, start the API, and supply the config above through the
+environment. Obtain a short-lived access token from a development email/password
+session, then run:
+
+```sh
+export SUPABASE_ACCESS_TOKEN='short-lived development access token'
+curl --fail-with-body \
+  --header "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+  http://127.0.0.1:8000/admin/auth-check
+curl --include http://127.0.0.1:8000/admin/auth-check
+unset SUPABASE_ACCESS_TOKEN
+```
+
+The authenticated call returns the local admin ID, Supabase subject, and the
+literal role `admin`. The second call returns a safe `401` envelope. Never commit
+the config, database URL, access token, publishable key, email, or password.
+Development Cloud Run configuration and Secret Manager delivery are documented
+in [`infra/terraform/README.md`](infra/terraform/README.md).
 
 ## Workspace layout
 

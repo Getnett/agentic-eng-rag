@@ -26,6 +26,38 @@ resource "google_cloud_run_v2_service" "runtime" {
         value = var.environment
       }
 
+      dynamic "env" {
+        for_each = each.key == "api" ? {
+          INSTANCE_CONNECTION_NAME = google_sql_database_instance.primary.connection_name
+          DB_NAME                  = google_sql_database.application.name
+          DB_USER = trimsuffix(
+            google_service_account.runtime["api"].email,
+            ".gserviceaccount.com",
+          )
+        } : {}
+
+        content {
+          name  = env.key
+          value = env.value
+        }
+      }
+
+      dynamic "env" {
+        for_each = (
+          each.key == "api" && var.supabase_auth_secret_version != null
+        ) ? [var.supabase_auth_secret_version] : []
+
+        content {
+          name = "SUPABASE_AUTH_CONFIG"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.application["application-auth-secret"].secret_id
+              version = env.value
+            }
+          }
+        }
+      }
+
       resources {
         limits = {
           cpu    = "1"
@@ -50,6 +82,7 @@ resource "google_cloud_run_v2_service" "runtime" {
     google_project_iam_member.runtime,
     google_project_service.required["run.googleapis.com"],
     google_service_networking_connection.private_services,
+    google_sql_user.api,
   ]
 
   lifecycle {

@@ -17,9 +17,10 @@ from google.cloud.sql.connector import Connector, IPTypes
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.engine.interfaces import DBAPIConnection
+from sqlalchemy.sql.compiler import IdentifierPreparer
 
 APPLICATION_SCHEMA = "rag_app"
-HEAD_REVISION = "0002_core_schema"
+HEAD_REVISION = "0003_admin_identity"
 API_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -35,6 +36,7 @@ class MigrationSettings:
     instance_connection_name: str | None = None
     database_name: str | None = None
     database_user: str | None = None
+    application_database_user: str | None = None
 
     @classmethod
     def from_environment(cls) -> MigrationSettings:
@@ -44,8 +46,10 @@ class MigrationSettings:
             instance_connection_name=os.getenv("INSTANCE_CONNECTION_NAME"),
             database_name=os.getenv("DB_NAME"),
             database_user=os.getenv("DB_USER"),
+            application_database_user=os.getenv("APP_DB_USER"),
         )
         settings.validate()
+        settings.validate_application_database_user()
         return settings
 
     @property
@@ -71,6 +75,22 @@ class MigrationSettings:
         raise MigrationConfigurationError(
             "Set DATABASE_URL, or set INSTANCE_CONNECTION_NAME, DB_NAME, and DB_USER."
         )
+
+    def validate_application_database_user(self) -> None:
+        """Reject malformed role names before generating a quoted GRANT target."""
+        if self.application_database_user is None:
+            return
+        if (
+            not self.application_database_user
+            or len(self.application_database_user) > 63
+            or any(
+                character not in "abcdefghijklmnopqrstuvwxyz0123456789-@."
+                for character in self.application_database_user
+            )
+        ):
+            raise MigrationConfigurationError(
+                "APP_DB_USER must be a valid lowercase Cloud SQL IAM database user."
+            )
 
 
 @dataclass(frozen=True)
@@ -156,11 +176,30 @@ def _read_result(connection: Connection) -> MigrationResult:
     )
 
 
+def _grant_application_access(
+    connection: Connection,
+    application_database_user: str | None,
+) -> None:
+    """Grant the API identity only the POR-36 schema/table permissions."""
+    if application_database_user is None:
+        return
+    quoted_user = IdentifierPreparer(connection.dialect).quote_identifier(application_database_user)
+    connection.execute(text(f'GRANT USAGE ON SCHEMA "{APPLICATION_SCHEMA}" TO {quoted_user}'))
+    connection.execute(
+        text(f'GRANT SELECT, INSERT ON TABLE "{APPLICATION_SCHEMA}".admin_user TO {quoted_user}')
+    )
+
+
 def upgrade(settings: MigrationSettings) -> MigrationResult:
     """Upgrade to head transactionally and return safe verification metadata."""
+    settings.validate_application_database_user()
     with migration_engine(settings) as engine:
         with engine.begin() as connection:
             command.upgrade(_alembic_config(connection), "head")
+            _grant_application_access(
+                connection,
+                settings.application_database_user,
+            )
         with engine.connect() as connection:
             return _read_result(connection)
 

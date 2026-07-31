@@ -13,3 +13,7 @@ allow_destructive_cleanup = false
 # Leave unset for the first apply. After pushing the migration image, use the
 # Terraform-managed repository and an immutable digest.
 # migration_image = "europe-west1-docker.pkg.dev/PROJECT/rag-dev-images/migrations@sha256:DIGEST"
+
+# After adding the documented Supabase verification JSON to the Terraform-managed
+# application-auth-secret, pin its immutable numeric version here.
+# supabase_auth_secret_version = "1"

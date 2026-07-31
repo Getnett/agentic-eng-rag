@@ -1,6 +1,7 @@
 """Application persistence models and repositories."""
 
 from rag_api.db.models import (
+    AdminUser,
     Base,
     Chunk,
     Conversation,
@@ -16,6 +17,7 @@ from rag_api.db.models import (
     Widget,
 )
 from rag_api.db.repositories import (
+    AdminUserRepository,
     ChunkCreate,
     ConversationRepository,
     IllegalSourceVersionTransition,
@@ -26,6 +28,8 @@ from rag_api.db.repositories import (
 )
 
 __all__ = [
+    "AdminUser",
+    "AdminUserRepository",
     "Base",
     "Chunk",
     "ChunkCreate",

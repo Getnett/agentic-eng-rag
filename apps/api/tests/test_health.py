@@ -31,7 +31,7 @@ async def test_health_endpoint_reports_safe_revision_metadata(
 
 
 @pytest.mark.anyio
-async def test_health_image_exposes_no_product_or_documentation_routes() -> None:
+async def test_api_exposes_no_root_or_documentation_routes() -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         assert (await client.get("/")).status_code == 404
