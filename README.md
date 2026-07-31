@@ -28,18 +28,19 @@ Both dependency managers use committed lockfiles. `bootstrap` fails rather than 
 
 ## Common commands
 
-| Command                   | Purpose                                                |
-| ------------------------- | ------------------------------------------------------ |
-| `mise run bootstrap`      | Install all locked JavaScript and Python dependencies. |
-| `mise run format`         | Format TypeScript, Python, and Terraform workspaces.   |
-| `mise run format:check`   | Verify formatting without changing files.              |
-| `mise run lint`           | Run ESLint and Ruff.                                   |
-| `mise run typecheck`      | Run TypeScript and Python type checkers.               |
-| `mise run test`           | Run workspace tests and Terraform validation.          |
-| `mise run check`          | Run every non-mutating quality gate used by CI.        |
-| `mise run test:api-image` | Build and smoke-test the health-only API container.    |
-| `mise run db:migrate`     | Upgrade the configured database to the migration head. |
-| `mise run db:downgrade`   | Downgrade the configured database to the base.         |
+| Command                    | Purpose                                                   |
+| -------------------------- | --------------------------------------------------------- |
+| `mise run bootstrap`       | Install all locked JavaScript and Python dependencies.    |
+| `mise run format`          | Format TypeScript, Python, and Terraform workspaces.      |
+| `mise run format:check`    | Verify formatting without changing files.                 |
+| `mise run lint`            | Run ESLint and Ruff.                                      |
+| `mise run typecheck`       | Run TypeScript and Python type checkers.                  |
+| `mise run test`            | Run workspace tests and Terraform validation.             |
+| `mise run check`           | Run every non-mutating quality gate used by CI.           |
+| `mise run test:api-image`  | Build and smoke-test the health-only API container.       |
+| `mise run db:migrate`      | Upgrade the configured database to the migration head.    |
+| `mise run db:downgrade`    | Downgrade the configured database to the base.            |
+| `mise run db:schema-probe` | Migrate and probe the core schema in disposable Postgres. |
 
 ## Database migrations
 
@@ -65,6 +66,17 @@ mise run test:migrations
 The test starts and removes its own container. The migration runner never logs
 `DATABASE_URL`; it reports only the applied revision, installed vector version,
 and a harmless vector-cast probe.
+
+To inspect the POR-35 core schema through its async repositories, run:
+
+```sh
+mise run db:schema-probe
+```
+
+This command starts the pinned pgvector PostgreSQL image, migrates it to
+`0002_core_schema`, inserts one widget/source/version/chunk/conversation/message/
+trace chain, prints only table row counts, rolls the fixture transaction back,
+verifies every count returned to zero, and removes the container.
 
 Cloud execution uses `INSTANCE_CONNECTION_NAME`, `DB_NAME`, and `DB_USER`.
 Terraform supplies these to a passwordless IAM-authenticated Cloud Run job. See

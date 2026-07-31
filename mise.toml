@@ -107,7 +107,46 @@ run = "uv run python -m rag_api.migrations downgrade"
 
 [tasks."test:migrations"]
 description = "Test migration upgrade, idempotency, pgvector, and downgrade using Docker"
-run = "uv run pytest apps/api/tests/test_migrations_integration.py"
+run = """
+uv run pytest \
+  apps/api/tests/test_migrations_integration.py \
+  apps/api/tests/test_core_schema_migration_integration.py
+"""
+
+[tasks."db:schema-probe"]
+description = "Migrate and probe the core schema in disposable pgvector PostgreSQL"
+run = """
+container_id="$(
+  docker run \
+    --detach \
+    --rm \
+    --env POSTGRES_PASSWORD=schema-probe \
+    --env POSTGRES_DB=schema_probe \
+    --publish 127.0.0.1::5432 \
+    pgvector/pgvector:0.8.1-pg16@sha256:33198da2828a14c30348d2ccb4750833d5ed9a44c88d840a0e523d7417120337
+)"
+trap 'docker rm --force "$container_id" >/dev/null 2>&1 || true' EXIT
+port="$(docker port "$container_id" 5432/tcp | sed 's/.*://')"
+
+for attempt in $(seq 1 40); do
+  if docker exec "$container_id" pg_isready --username postgres --dbname schema_probe \
+    >/dev/null 2>&1; then
+    break
+  fi
+  if [ "$attempt" -eq 40 ]; then
+    docker logs "$container_id"
+    exit 1
+  fi
+  sleep 0.25
+done
+
+sync_database_url="postgresql+pg8000://postgres:schema-probe@127.0.0.1:${port}/schema_probe"
+async_database_url="postgresql+asyncpg://postgres:schema-probe@127.0.0.1:${port}/schema_probe"
+DATABASE_URL="$sync_database_url" PYTHONPATH=apps/api/src \
+  uv run python -m rag_api.migrations upgrade
+DATABASE_URL="$async_database_url" PYTHONPATH=apps/api/src \
+  uv run python -m rag_api.schema_probe
+"""
 
 [tasks."test:migration-image"]
 description = "Build the reproducible one-shot migration container"
