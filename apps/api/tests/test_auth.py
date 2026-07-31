@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import time
 import uuid
 from typing import Any
@@ -14,6 +16,7 @@ from jwt.algorithms import RSAAlgorithm
 from rag_api.auth import (
     AdminAuthenticationError,
     InvalidAccessToken,
+    RemoteJwksProvider,
     SupabaseAuthSettings,
     SupabaseJwtVerifier,
     TokenVerificationUnavailable,
@@ -37,6 +40,24 @@ class StaticJwksProvider:
         if key_id != KEY_ID:
             raise InvalidAccessToken("Unknown test key.")
         return self._public_jwk
+
+
+class CountingRemoteJwksProvider(RemoteJwksProvider):
+    """Use deterministic keys while preserving production refresh coordination."""
+
+    def __init__(self, public_jwk: dict[str, Any], clock: list[float]) -> None:
+        super().__init__(
+            jwks_url=f"{ISSUER}/.well-known/jwks.json",
+            cache_ttl_seconds=600,
+            clock=lambda: clock[0],
+        )
+        self._public_jwk = public_jwk
+        self.fetch_count = 0
+
+    async def _fetch_keys(self) -> dict[str, dict[str, Any]]:
+        self.fetch_count += 1
+        await asyncio.sleep(0)
+        return {KEY_ID: self._public_jwk}
 
 
 class UnavailableVerifier:
@@ -77,6 +98,18 @@ def access_token(
         algorithm="RS256",
         headers={"kid": KEY_ID},
     )
+
+
+def with_algorithm_header(token: str, algorithm: str) -> str:
+    """Replace only the untrusted JWT header while retaining its forged signature."""
+    _header, payload, signature = token.split(".")
+    header = jwt.utils.base64url_encode(
+        json.dumps(
+            {"alg": algorithm, "kid": KEY_ID, "typ": "JWT"},
+            separators=(",", ":"),
+        ).encode()
+    ).decode()
+    return ".".join((header, payload, signature))
 
 
 def verifier(public_jwk: dict[str, Any]) -> SupabaseJwtVerifier:
@@ -131,6 +164,32 @@ async def test_forged_signature_is_rejected(
 
 
 @pytest.mark.anyio
+async def test_unknown_key_refreshes_are_coalesced_and_rate_limited(
+    signing_material: tuple[rsa.RSAPrivateKey, dict[str, Any]],
+) -> None:
+    _private_key, public_jwk = signing_material
+    clock = [0.0]
+    provider = CountingRemoteJwksProvider(public_jwk, clock)
+
+    assert await provider.get_key(KEY_ID) == public_jwk
+    assert provider.fetch_count == 1
+
+    clock[0] = 60.0
+    results = await asyncio.gather(
+        *(provider.get_key(f"attacker-key-{index}") for index in range(20)),
+        return_exceptions=True,
+    )
+
+    assert all(isinstance(result, InvalidAccessToken) for result in results)
+    assert provider.fetch_count == 2
+
+    clock[0] = 61.0
+    with pytest.raises(InvalidAccessToken):
+        await provider.get_key("another-attacker-key")
+    assert provider.fetch_count == 2
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     ("role", "is_anonymous"),
     [("anon", False), ("authenticated", True)],
@@ -168,6 +227,7 @@ async def test_absent_and_invalid_tokens_return_the_same_safe_401_shape(
         access_token(private_key, issuer="https://forged.example/auth/v1"),
         access_token(private_key, audience="wrong-audience"),
         access_token(forged_private_key),
+        with_algorithm_header(access_token(private_key), "ES256"),
     ]
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:

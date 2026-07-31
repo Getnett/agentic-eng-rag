@@ -7,6 +7,7 @@ import json
 import os
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal, Protocol, cast
 from urllib.parse import urlparse
@@ -16,6 +17,7 @@ import jwt
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import InvalidTokenError, PyJWK
+from jwt.exceptions import InvalidKeyError
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +27,7 @@ from rag_api.db.repositories import AdminUserRepository
 ALLOWED_JWT_ALGORITHMS = frozenset({"RS256", "ES256", "EdDSA"})
 AUTHENTICATED_ROLE: Literal["authenticated"] = "authenticated"
 ADMIN_ROLE: Literal["admin"] = "admin"
+UNKNOWN_KEY_REFRESH_INTERVAL_SECONDS = 60.0
 
 
 class AuthConfigurationError(ValueError):
@@ -131,59 +134,100 @@ class RemoteJwksProvider:
         jwks_url: str,
         cache_ttl_seconds: int,
         timeout_seconds: float = 5.0,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._jwks_url = jwks_url
         self._cache_ttl_seconds = cache_ttl_seconds
         self._timeout_seconds = timeout_seconds
+        self._clock = clock
         self._keys: dict[str, dict[str, Any]] = {}
         self._expires_at = 0.0
+        self._refresh_generation = 0
+        self._next_unknown_key_refresh_at = 0.0
+        self._unknown_key_refresh_failed = False
         self._lock = asyncio.Lock()
 
     async def get_key(self, key_id: str) -> dict[str, Any]:
-        if time.monotonic() >= self._expires_at:
+        if self._clock() >= self._expires_at:
             await self._refresh()
         key = self._keys.get(key_id)
         if key is None:
-            await self._refresh(force=True)
+            await self._refresh_for_unknown_key(
+                key_id=key_id,
+                observed_generation=self._refresh_generation,
+            )
             key = self._keys.get(key_id)
         if key is None:
             raise InvalidAccessToken("The token signing key is unavailable.")
         return key
 
-    async def _refresh(self, *, force: bool = False) -> None:
+    async def _refresh(self) -> None:
         async with self._lock:
-            if not force and time.monotonic() < self._expires_at:
+            if self._clock() < self._expires_at:
                 return
+            self._install_keys(await self._fetch_keys())
+
+    async def _refresh_for_unknown_key(
+        self,
+        *,
+        key_id: str,
+        observed_generation: int,
+    ) -> None:
+        async with self._lock:
+            if key_id in self._keys or self._refresh_generation != observed_generation:
+                return
+
+            now = self._clock()
+            if now < self._next_unknown_key_refresh_at:
+                if self._unknown_key_refresh_failed:
+                    raise TokenVerificationUnavailable(
+                        "The token signing keys could not be loaded."
+                    )
+                return
+
+            self._next_unknown_key_refresh_at = now + UNKNOWN_KEY_REFRESH_INTERVAL_SECONDS
             try:
-                async with httpx.AsyncClient(
-                    follow_redirects=False,
-                    timeout=self._timeout_seconds,
-                ) as client:
-                    response = await client.get(self._jwks_url)
-                    response.raise_for_status()
-                    payload = response.json()
-            except (httpx.HTTPError, ValueError) as error:
-                raise TokenVerificationUnavailable(
-                    "The token signing keys could not be loaded."
-                ) from error
+                keys = await self._fetch_keys()
+            except TokenVerificationUnavailable:
+                self._unknown_key_refresh_failed = True
+                raise
+            self._install_keys(keys)
 
-            if not isinstance(payload, dict) or not isinstance(payload.get("keys"), list):
-                raise TokenVerificationUnavailable("The token signing keys are malformed.")
+    async def _fetch_keys(self) -> dict[str, dict[str, Any]]:
+        try:
+            async with httpx.AsyncClient(
+                follow_redirects=False,
+                timeout=self._timeout_seconds,
+            ) as client:
+                response = await client.get(self._jwks_url)
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError) as error:
+            raise TokenVerificationUnavailable(
+                "The token signing keys could not be loaded."
+            ) from error
 
-            keys: dict[str, dict[str, Any]] = {}
-            for value in payload["keys"]:
-                if not isinstance(value, dict):
-                    continue
-                key_id = value.get("kid")
-                if isinstance(key_id, str) and key_id and value.get("kty") != "oct":
-                    keys[key_id] = value
-            if not keys:
-                raise TokenVerificationUnavailable(
-                    "No asymmetric token signing keys are available."
-                )
+        if not isinstance(payload, dict) or not isinstance(payload.get("keys"), list):
+            raise TokenVerificationUnavailable("The token signing keys are malformed.")
 
-            self._keys = keys
-            self._expires_at = time.monotonic() + self._cache_ttl_seconds
+        keys: dict[str, dict[str, Any]] = {}
+        for value in payload["keys"]:
+            if not isinstance(value, dict):
+                continue
+            key_id = value.get("kid")
+            if isinstance(key_id, str) and key_id and value.get("kty") != "oct":
+                keys[key_id] = value
+        if not keys:
+            raise TokenVerificationUnavailable("No asymmetric token signing keys are available.")
+        return keys
+
+    def _install_keys(self, keys: dict[str, dict[str, Any]]) -> None:
+        now = self._clock()
+        self._keys = keys
+        self._expires_at = now + self._cache_ttl_seconds
+        self._refresh_generation += 1
+        self._next_unknown_key_refresh_at = now + UNKNOWN_KEY_REFRESH_INTERVAL_SECONDS
+        self._unknown_key_refresh_failed = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,9 +272,14 @@ class SupabaseJwtVerifier:
                 raise InvalidAccessToken("The token header is invalid.")
 
             public_jwk = await self._jwks_provider.get_key(key_id)
-            parsed_jwk = PyJWK.from_dict(public_jwk, algorithm=algorithm)
-            if parsed_jwk.algorithm_name != algorithm:
+            jwk_algorithm = public_jwk.get("alg")
+            if (
+                not isinstance(jwk_algorithm, str)
+                or jwk_algorithm not in ALLOWED_JWT_ALGORITHMS
+                or jwk_algorithm != algorithm
+            ):
                 raise InvalidAccessToken("The token algorithm does not match its key.")
+            parsed_jwk = PyJWK.from_dict(public_jwk, algorithm=jwk_algorithm)
 
             claims = jwt.decode(
                 token,
@@ -242,7 +291,7 @@ class SupabaseJwtVerifier:
             )
         except InvalidAccessToken:
             raise
-        except (InvalidTokenError, KeyError, TypeError, ValueError) as error:
+        except (InvalidTokenError, InvalidKeyError, KeyError, TypeError, ValueError) as error:
             raise InvalidAccessToken("The access token is invalid.") from error
 
         if claims.get("role") != AUTHENTICATED_ROLE or claims.get("is_anonymous") is True:
