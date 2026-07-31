@@ -28,20 +28,22 @@ Both dependency managers use committed lockfiles. `bootstrap` fails rather than 
 
 ## Common commands
 
-| Command                    | Purpose                                                   |
-| -------------------------- | --------------------------------------------------------- |
-| `mise run bootstrap`       | Install all locked JavaScript and Python dependencies.    |
-| `mise run format`          | Format TypeScript, Python, and Terraform workspaces.      |
-| `mise run format:check`    | Verify formatting without changing files.                 |
-| `mise run lint`            | Run ESLint and Ruff.                                      |
-| `mise run typecheck`       | Run TypeScript and Python type checkers.                  |
-| `mise run test`            | Run workspace tests and Terraform validation.             |
-| `mise run check`           | Run every non-mutating quality gate used by CI.           |
-| `mise run test:api-image`  | Build and smoke-test the API container health endpoint.   |
-| `mise run db:migrate`      | Upgrade the configured database to the migration head.    |
-| `mise run db:downgrade`    | Downgrade the configured database to the base.            |
-| `mise run db:schema-probe` | Migrate and probe the core schema in disposable Postgres. |
-| `mise run test:admin-auth` | Test JWT verification and administrator subject mapping.  |
+| Command                      | Purpose                                                    |
+| ---------------------------- | ---------------------------------------------------------- |
+| `mise run bootstrap`         | Install all locked JavaScript and Python dependencies.     |
+| `mise run format`            | Format TypeScript, Python, and Terraform workspaces.       |
+| `mise run format:check`      | Verify formatting without changing files.                  |
+| `mise run lint`              | Run ESLint and Ruff.                                       |
+| `mise run typecheck`         | Run TypeScript and Python type checkers.                   |
+| `mise run test`              | Run workspace tests and Terraform validation.              |
+| `mise run check`             | Run every non-mutating quality gate used by CI.            |
+| `mise run test:api-image`    | Build and smoke-test the API container health endpoint.    |
+| `mise run db:migrate`        | Upgrade the configured database to the migration head.     |
+| `mise run db:downgrade`      | Downgrade the configured database to the base.             |
+| `mise run db:schema-probe`   | Migrate and probe the core schema in disposable Postgres.  |
+| `mise run test:admin-auth`   | Test JWT verification and administrator subject mapping.   |
+| `mise run test:providers`    | Test provider adapter contracts and deterministic fakes.   |
+| `mise run providers:example` | Swap fake adapters through provider-neutral orchestration. |
 
 ## Database migrations
 
@@ -141,14 +143,15 @@ in [`infra/terraform/README.md`](infra/terraform/README.md).
 
 ## Workspace layout
 
-| Path                 | Responsibility                                 |
-| -------------------- | ---------------------------------------------- |
-| `apps/api`           | FastAPI public and admin API service.          |
-| `apps/worker`        | Asynchronous ingestion worker.                 |
-| `apps/admin`         | Next.js administration portal.                 |
-| `packages/widget`    | Embeddable support-chat web component.         |
-| `packages/contracts` | Shared request, response, and event contracts. |
-| `infra/terraform`    | GCP infrastructure definitions.                |
+| Path                 | Responsibility                                            |
+| -------------------- | --------------------------------------------------------- |
+| `apps/api`           | FastAPI public and admin API service.                     |
+| `apps/worker`        | Asynchronous ingestion worker.                            |
+| `apps/admin`         | Next.js administration portal.                            |
+| `packages/widget`    | Embeddable support-chat web component.                    |
+| `packages/contracts` | Shared request, response, and event contracts.            |
+| `packages/providers` | Provider-neutral Python adapter contracts and test fakes. |
+| `infra/terraform`    | GCP infrastructure definitions.                           |
 
 The current placeholders reserve these boundaries; product behavior is added by later issues.
 

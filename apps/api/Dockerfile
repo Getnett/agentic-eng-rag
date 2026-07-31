@@ -16,6 +16,7 @@ COPY --from=uv /uv /uvx /bin/
 COPY pyproject.toml uv.lock ./
 COPY apps/api/pyproject.toml apps/api/pyproject.toml
 COPY apps/worker/pyproject.toml apps/worker/pyproject.toml
+COPY packages/providers/pyproject.toml packages/providers/pyproject.toml
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync \

@@ -33,7 +33,7 @@ run = "pnpm run format"
 
 [tasks."format:python"]
 description = "Format Python workspaces"
-run = "uv run ruff format apps/api apps/worker"
+run = "uv run ruff format apps/api apps/worker packages/providers"
 
 [tasks."format:terraform"]
 description = "Format Terraform files"
@@ -49,7 +49,7 @@ run = "pnpm run format:check"
 
 [tasks."format:check:python"]
 description = "Check Python workspace formatting"
-run = "uv run ruff format --check apps/api apps/worker"
+run = "uv run ruff format --check apps/api apps/worker packages/providers"
 
 [tasks."format:check:terraform"]
 description = "Check Terraform formatting"
@@ -69,7 +69,7 @@ run = "pnpm run lint"
 
 [tasks."lint:python"]
 description = "Lint Python workspaces"
-run = "uv run ruff check apps/api apps/worker"
+run = "uv run ruff check apps/api apps/worker packages/providers"
 
 [tasks.lint]
 description = "Lint every workspace"
@@ -81,7 +81,7 @@ run = "pnpm run typecheck"
 
 [tasks."typecheck:python"]
 description = "Type-check Python workspaces"
-run = "uv run mypy apps/api/src apps/worker/src"
+run = "uv run mypy apps/api/src apps/worker/src packages/providers/src packages/providers/tests packages/providers/examples"
 
 [tasks.typecheck]
 description = "Type-check every workspace"
@@ -93,7 +93,15 @@ run = "pnpm run test"
 
 [tasks."test:python"]
 description = "Run Python workspace tests"
-run = "uv run pytest apps/api/tests apps/worker/tests"
+run = "uv run pytest apps/api/tests apps/worker/tests packages/providers/tests"
+
+[tasks."test:providers"]
+description = "Run provider adapter contract and deterministic fake tests"
+run = "uv run pytest packages/providers/tests"
+
+[tasks."providers:example"]
+description = "Verify provider-neutral orchestration by swapping fake adapters"
+run = "uv run python packages/providers/examples/swap_fake_provider.py"
 
 [tasks."db:migrate"]
 description = "Upgrade the configured PostgreSQL database to the migration head"

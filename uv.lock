@@ -4,6 +4,7 @@ requires-python = "==3.13.*"
 
 [manifest]
 members = [
+    "rag-provider-adapters",
     "rag-support-api",
     "rag-support-worker",
     "rag-support-workspace",
@@ -1023,6 +1024,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/97/c9/39d5b874e8b28845e4ec2202b5da735d0199dbe5b8fb85f91398814a9a46/pyyaml-6.0.3-cp313-cp313-win_amd64.whl", hash = "sha256:79005a0d97d5ddabfeeea4cf676af11e647e41d81c9a7722a193022accdb6b7c", size = 154090, upload-time = "2025-09-25T21:32:33.659Z" },
     { url = "https://files.pythonhosted.org/packages/73/e8/2bdf3ca2090f68bb3d75b44da7bbc71843b19c9f2b9cb9b0f4ab7a5a4329/pyyaml-6.0.3-cp313-cp313-win_arm64.whl", hash = "sha256:5498cd1645aa724a7c71c8f378eb29ebe23da2fc0d7a08071d89469bf1d2defb", size = 140246, upload-time = "2025-09-25T21:32:34.663Z" },
 ]
+
+[[package]]
+name = "rag-provider-adapters"
+version = "0.1.0"
+source = { editable = "packages/providers" }
 
 [[package]]
 name = "rag-support-api"
