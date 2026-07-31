@@ -333,12 +333,15 @@ async def test_verified_anonymous_session_returns_safe_403(
 
     assert response.status_code == 403
     assert "www-authenticate" not in response.headers
-    assert response.json()["error"] == {
-        "code": "ADMIN_ACCESS_REQUIRED",
+    payload = response.json()
+    assert payload["contract_version"] == "v1"
+    assert uuid.UUID(payload["request_id"])
+    assert payload["error"] == {
+        "code": "AUTHENTICATION_REQUIRED",
         "message": "Administrator access is required.",
         "retryable": False,
-        "details": [],
     }
+    assert "details" not in payload["error"]
 
 
 @pytest.mark.anyio

@@ -113,7 +113,7 @@ def create_app(
         error: AdminAuthenticationError,
     ) -> JSONResponse:
         request_id = uuid.uuid4()
-        if error.status_code in {401, 503}:
+        if error.status_code in {401, 403, 503}:
             envelope: PublicErrorEnvelope | AdminErrorEnvelope = PublicErrorEnvelope(
                 request_id=request_id,
                 error=PublicError(
