@@ -66,7 +66,8 @@ never prompt text, credentials, authorization data, or raw SDK error details.
 `VertexEmbeddingAdapter` uses the same configured model and dimension for
 document and query requests while sending their distinct retrieval task types.
 It splits online requests at the configured batch size, disables truncation,
-uses bounded exponential backoff for retryable idempotent calls, validates every
+rejects a conservative UTF-8 token upper bound before billed calls, uses bounded
+exponential backoff only for recognized transient failures, validates every
 response vector, and returns provider-normalized token and cost metadata.
 
 ```sh

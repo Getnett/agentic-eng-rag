@@ -572,6 +572,21 @@ async def test_source_version_records_one_immutable_embedding_profile(
             dimension=768,
         )
 
+        with pytest.raises(ValueError, match="must match"):
+            await repository.add_chunks(
+                version_id=version.id,
+                chunks=(
+                    ChunkCreate(
+                        text="Internally valid but profile-incompatible vector",
+                        token_count=6,
+                        embedding=(0.1, 0.2, 0.3),
+                        embedding_dimension=3,
+                    ),
+                ),
+            )
+        chunk_count = await session.scalar(select(func.count()).select_from(Chunk))
+        assert chunk_count == 0
+
         with pytest.raises(ValueError, match="immutable"):
             await repository.record_embedding_profile(
                 version_id=version.id,

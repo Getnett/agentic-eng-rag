@@ -224,6 +224,16 @@ class VertexEmbeddingAdapter:
         return self._config.dimension
 
     async def embed(self, request: EmbeddingRequest) -> EmbeddingResult:
+        # Predict-based Vertex embedding models expose exact token usage only in
+        # the embedding response and reject the generative countTokens endpoint.
+        # UTF-8 bytes plus per-input boundary overhead is therefore used as a
+        # conservative preflight upper bound before any billed request is sent.
+        if self._conservative_token_upper_bound(request.texts) > request.budget.max_input_tokens:
+            raise self._error(
+                ProviderErrorCode.INVALID_REQUEST,
+                "The embedding request exceeds its input-token budget.",
+            )
+
         vectors: list[tuple[float, ...]] = []
         input_tokens = 0
         sdk_task = self._sdk_task(request.task)
@@ -301,6 +311,10 @@ class VertexEmbeddingAdapter:
             tuple(texts[index : index + self._config.batch_size])
             for index in range(0, len(texts), self._config.batch_size)
         )
+
+    @staticmethod
+    def _conservative_token_upper_bound(texts: Sequence[str]) -> int:
+        return sum(len(text.encode("utf-8")) + 2 for text in texts)
 
     async def _embed_batch(
         self,
@@ -428,7 +442,7 @@ class VertexEmbeddingAdapter:
         elif isinstance(error, ValueError):
             code = ProviderErrorCode.INVALID_RESPONSE
         else:
-            code = ProviderErrorCode.UNAVAILABLE
+            code = ProviderErrorCode.INVALID_RESPONSE
         return self._error(code, self._safe_error_message(code))
 
     def _error(self, code: ProviderErrorCode, message: str) -> ProviderAdapterError:

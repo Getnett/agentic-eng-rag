@@ -198,6 +198,23 @@ class SourceRepository:
         if version is None:
             raise RepositoryEntityNotFound(f"Source version {version_id} was not found.")
 
+        embedding_profile = version.metadata_json.get("embedding")
+        if embedding_profile is not None:
+            if not isinstance(embedding_profile, dict):
+                raise ValueError("Source version embedding metadata must be an object.")
+            recorded_dimension = embedding_profile.get("dimension")
+            if type(recorded_dimension) is not int or recorded_dimension <= 0:
+                raise ValueError(
+                    "Source version embedding metadata requires a positive integer dimension."
+                )
+            if any(
+                chunk.embedding is not None and chunk.embedding_dimension != recorded_dimension
+                for chunk in chunks
+            ):
+                raise ValueError(
+                    "Chunk embedding dimension must match the source version embedding profile."
+                )
+
         records = [
             Chunk(
                 id=chunk.id,

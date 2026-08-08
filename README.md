@@ -174,9 +174,10 @@ One immutable configuration supplies `text-embedding-005` and dimension `768`
 to both API query embeddings and worker document embeddings. The adapter sends
 the corresponding `RETRIEVAL_QUERY` or `RETRIEVAL_DOCUMENT` task type, batches at
 the configured online-request limit, disables silent truncation, retries only
-transient idempotent batch failures, and rejects any returned dimension other
-than the configured dimension. Source versions record the provider, model, and
-dimension in their metadata before vectors are indexed.
+recognized transient idempotent batch failures, and rejects over-budget input
+before any billed batch. Source versions record the provider, model, and
+dimension in their metadata, and chunk insertion enforces that recorded
+dimension before vectors are indexed.
 
 Run the credential-free suite with `mise run test:vertex-embedding`. For the
 explicit billed proof, authenticate Application Default Credentials and set the

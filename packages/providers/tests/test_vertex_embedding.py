@@ -218,6 +218,25 @@ async def test_batches_in_order_and_normalizes_metadata(
 
 
 @pytest.mark.anyio
+async def test_rejects_over_budget_input_before_any_billed_batch() -> None:
+    factory = ScriptedEmbedContent(
+        [types.EmbedContentResponse(embeddings=[embedding([0.1, 0.2, 0.3])])]
+    )
+    adapter = VertexEmbeddingAdapter(config(), embed_content=factory)
+    over_budget = EmbeddingRequest(
+        texts=("無空格", "second batch input"),
+        budget=RequestBudget(timeout_seconds=2.5, max_input_tokens=1),
+        task=EmbeddingTask.RETRIEVAL_DOCUMENT,
+    )
+
+    with pytest.raises(ProviderAdapterError) as raised:
+        await adapter.embed(over_budget)
+
+    assert raised.value.code is ProviderErrorCode.INVALID_REQUEST
+    assert factory.calls == []
+
+
+@pytest.mark.anyio
 async def test_retries_only_retryable_batch_failures_with_bounded_backoff() -> None:
     delays: list[float] = []
 
@@ -256,6 +275,24 @@ async def test_does_not_retry_nonretryable_failure_or_leak_content(
     assert len(factory.calls) == 1
     assert SENSITIVE_TEXT not in caplog.text
     assert SENSITIVE_TEXT not in str(raised.value)
+
+
+@pytest.mark.anyio
+async def test_does_not_retry_unexpected_programming_failure() -> None:
+    factory = ScriptedEmbedContent(
+        [
+            RuntimeError(SENSITIVE_TEXT),
+            types.EmbedContentResponse(embeddings=[embedding([0.1, 0.2, 0.3])]),
+        ]
+    )
+    adapter = VertexEmbeddingAdapter(config(), embed_content=factory)
+
+    with pytest.raises(ProviderAdapterError) as raised:
+        await adapter.embed(request("programming failure"))
+
+    assert raised.value.code is ProviderErrorCode.INVALID_RESPONSE
+    assert raised.value.retryable is False
+    assert len(factory.calls) == 1
 
 
 @pytest.mark.anyio
