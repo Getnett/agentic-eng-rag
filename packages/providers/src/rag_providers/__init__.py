@@ -26,6 +26,10 @@ from rag_providers.contracts import (
 )
 from rag_providers.fakes import FakeEmbeddingAdapter, FakeGenerationAdapter
 from rag_providers.orchestration import ProviderOrchestrator
+from rag_providers.vertex import (
+    VertexGenerationAdapter,
+    VertexGenerationConfig,
+)
 
 __all__ = [
     "EmbeddingAdapter",
@@ -53,4 +57,6 @@ __all__ = [
     "RewriteRequest",
     "RewriteResult",
     "TokenUsage",
+    "VertexGenerationAdapter",
+    "VertexGenerationConfig",
 ]

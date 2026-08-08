@@ -9,6 +9,7 @@ locals {
   }
 
   required_services = toset([
+    "aiplatform.googleapis.com",
     "artifactregistry.googleapis.com",
     "cloudresourcemanager.googleapis.com",
     "compute.googleapis.com",
@@ -49,6 +50,7 @@ locals {
       "roles/monitoring.metricWriter",
     ])
     api = toset([
+      "roles/aiplatform.user",
       "roles/cloudsql.client",
       "roles/cloudsql.instanceUser",
       "roles/logging.logWriter",

@@ -5,13 +5,23 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Literal
 
-from fastapi import APIRouter, FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
+from rag_providers import (
+    GenerationAdapter,
+    GenerationDelta,
+    GenerationRequest,
+    ProviderAdapterError,
+    ProviderOrchestrator,
+    RequestBudget,
+    VertexGenerationAdapter,
+    VertexGenerationConfig,
+)
 
 from rag_api.auth import (
     AccessTokenVerifier,
@@ -69,6 +79,10 @@ class AdminErrorEnvelope(BaseModel):
 
 
 admin_router = APIRouter(prefix="/admin", tags=["admin"])
+VERTEX_SMOKE_PROMPT = """You answer only from the supplied support context.
+Context: A customer can reset their password from Settings > Security > Reset password.
+Question: Where can a customer reset their password?
+Answer in one short sentence."""
 
 
 @admin_router.get("/auth-check", response_model=AdminAuthCheckResponse)
@@ -80,10 +94,73 @@ async def admin_auth_check(admin: CurrentAdmin) -> AdminAuthCheckResponse:
     )
 
 
+@admin_router.post("/ai/vertex-generation-smoke", response_model=None)
+async def vertex_generation_smoke(
+    request: Request,
+    _admin: CurrentAdmin,
+) -> StreamingResponse | JSONResponse:
+    """Run one fixed, admin-only development prompt through Vertex streaming."""
+    if os.getenv("APP_ENVIRONMENT") != "dev":
+        raise HTTPException(status_code=404)
+
+    factory = request.app.state.vertex_generation_adapter_factory
+    try:
+        adapter = factory()
+    except ProviderAdapterError as error:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "code": error.code.value,
+                "message": str(error),
+                "retryable": error.retryable,
+            },
+        )
+    except ValueError:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "code": "VERTEX_CONFIGURATION_UNAVAILABLE",
+                "message": "Vertex generation is not configured.",
+                "retryable": False,
+            },
+        )
+
+    async def stream() -> AsyncIterator[str]:
+        runtime = ProviderOrchestrator(generation=adapter)
+        try:
+            async for event in runtime.stream_generation(
+                GenerationRequest(
+                    prompt=VERTEX_SMOKE_PROMPT,
+                    budget=RequestBudget(
+                        timeout_seconds=30,
+                        max_input_tokens=256,
+                        max_output_tokens=96,
+                    ),
+                )
+            ):
+                if isinstance(event, GenerationDelta):
+                    yield event.text
+        except ProviderAdapterError as error:
+            yield f"\n[provider-error:{error.code.value}]\n"
+        finally:
+            if isinstance(adapter, VertexGenerationAdapter):
+                await adapter.aclose()
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 def create_app(
     *,
     auth_verifier: AccessTokenVerifier | None = None,
     database_session_factory: AsyncSessionFactory | None = None,
+    vertex_generation_adapter_factory: Callable[[], GenerationAdapter] | None = None,
 ) -> FastAPI:
     """Create an app with optional deterministic auth/database test seams."""
 
@@ -106,6 +183,11 @@ def create_app(
     application.state.database_runtime = None
     application.state.database_runtime_lock = asyncio.Lock()
     application.state.database_session_factory = database_session_factory
+    application.state.vertex_generation_adapter_factory = (
+        vertex_generation_adapter_factory
+        if vertex_generation_adapter_factory is not None
+        else lambda: VertexGenerationAdapter(VertexGenerationConfig.from_environment())
+    )
 
     @application.exception_handler(AdminAuthenticationError)
     async def handle_admin_authentication_error(

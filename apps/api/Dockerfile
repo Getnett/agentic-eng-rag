@@ -17,14 +17,14 @@ COPY pyproject.toml uv.lock ./
 COPY apps/api/pyproject.toml apps/api/pyproject.toml
 COPY apps/worker/pyproject.toml apps/worker/pyproject.toml
 COPY packages/providers/pyproject.toml packages/providers/pyproject.toml
+COPY packages/providers/src packages/providers/src
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync \
     --frozen \
     --no-dev \
     --package rag-support-api \
-    --extra api \
-    --no-install-workspace
+    --extra api
 
 COPY apps/api/src apps/api/src
 

@@ -14,6 +14,42 @@ variable "region" {
   default     = "europe-west1"
 }
 
+variable "vertex_generation_model" {
+  description = "Vertex Gemini model ID used by the development generation adapter."
+  type        = string
+  default     = "gemini-2.5-flash-lite"
+
+  validation {
+    condition = (
+      length(trimspace(var.vertex_generation_model)) > 0 &&
+      !strcontains(var.vertex_generation_model, " ")
+    )
+    error_message = "vertex_generation_model must be a nonblank model ID without spaces."
+  }
+}
+
+variable "vertex_generation_input_cost_per_million_tokens_usd" {
+  description = "Estimated standard Vertex input price in USD per million tokens for the configured generation model."
+  type        = number
+  default     = 0.10
+
+  validation {
+    condition     = var.vertex_generation_input_cost_per_million_tokens_usd >= 0
+    error_message = "vertex_generation_input_cost_per_million_tokens_usd must be non-negative."
+  }
+}
+
+variable "vertex_generation_output_cost_per_million_tokens_usd" {
+  description = "Estimated standard Vertex output price in USD per million tokens for the configured generation model."
+  type        = number
+  default     = 0.40
+
+  validation {
+    condition     = var.vertex_generation_output_cost_per_million_tokens_usd >= 0
+    error_message = "vertex_generation_output_cost_per_million_tokens_usd must be non-negative."
+  }
+}
+
 variable "environment" {
   description = "Environment label. The current Terraform root provisions development only."
   type        = string
