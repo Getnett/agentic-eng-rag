@@ -107,9 +107,49 @@ run = "uv run python packages/providers/examples/swap_fake_provider.py"
 description = "Run deterministic Vertex adapter and restricted smoke-endpoint tests"
 run = "uv run pytest packages/providers/tests/test_vertex.py apps/api/tests/test_vertex_smoke.py"
 
+[tasks."test:vertex-embedding"]
+description = "Run deterministic Vertex embedding adapter tests"
+run = "uv run pytest packages/providers/tests/test_vertex_embedding.py"
+
 [tasks."vertex:smoke"]
 description = "Run the explicit, billed Vertex streaming smoke script"
 run = "uv run python packages/providers/examples/stream_vertex.py"
+
+[tasks."vertex:embedding-smoke"]
+description = "Run billed Vertex document/query embeddings and verify pgvector persistence"
+run = """
+test "${RUN_VERTEX_EMBEDDING_INTEGRATION:-}" = "1"
+container_id="$(
+  docker run \
+    --detach \
+    --rm \
+    --env POSTGRES_PASSWORD=embedding-probe \
+    --env POSTGRES_DB=embedding_probe \
+    --publish 127.0.0.1::5432 \
+    pgvector/pgvector:0.8.1-pg16@sha256:33198da2828a14c30348d2ccb4750833d5ed9a44c88d840a0e523d7417120337
+)"
+trap 'docker rm --force "$container_id" >/dev/null 2>&1 || true' EXIT
+port="$(docker port "$container_id" 5432/tcp | sed 's/.*://')"
+
+for attempt in $(seq 1 40); do
+  if docker exec "$container_id" pg_isready --username postgres --dbname embedding_probe \
+    >/dev/null 2>&1; then
+    break
+  fi
+  if [ "$attempt" -eq 40 ]; then
+    docker logs "$container_id"
+    exit 1
+  fi
+  sleep 0.25
+done
+
+sync_database_url="postgresql+pg8000://postgres:embedding-probe@127.0.0.1:${port}/embedding_probe"
+async_database_url="postgresql+asyncpg://postgres:embedding-probe@127.0.0.1:${port}/embedding_probe"
+DATABASE_URL="$sync_database_url" PYTHONPATH=apps/api/src \
+  uv run python -m rag_api.migrations upgrade
+DATABASE_URL="$async_database_url" PYTHONPATH=apps/api/src \
+  uv run python -m rag_api.embedding_probe
+"""
 
 [tasks."db:migrate"]
 description = "Upgrade the configured PostgreSQL database to the migration head"

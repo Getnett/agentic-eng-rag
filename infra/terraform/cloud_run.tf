@@ -34,11 +34,28 @@ resource "google_cloud_run_v2_service" "runtime" {
             google_service_account.runtime["api"].email,
             ".gserviceaccount.com",
           )
-          GOOGLE_CLOUD_PROJECT                                 = var.project_id
-          GOOGLE_CLOUD_LOCATION                                = var.region
           VERTEX_GENERATION_MODEL                              = var.vertex_generation_model
           VERTEX_GENERATION_INPUT_COST_PER_MILLION_TOKENS_USD  = tostring(var.vertex_generation_input_cost_per_million_tokens_usd)
           VERTEX_GENERATION_OUTPUT_COST_PER_MILLION_TOKENS_USD = tostring(var.vertex_generation_output_cost_per_million_tokens_usd)
+        } : {}
+
+        content {
+          name  = env.key
+          value = env.value
+        }
+      }
+
+      dynamic "env" {
+        for_each = contains(["api", "worker"], each.key) ? {
+          GOOGLE_CLOUD_PROJECT                                   = var.project_id
+          GOOGLE_CLOUD_LOCATION                                  = var.region
+          VERTEX_EMBEDDING_MODEL                                 = var.vertex_embedding_model
+          VERTEX_EMBEDDING_DIMENSION                             = tostring(var.vertex_embedding_dimension)
+          VERTEX_EMBEDDING_BATCH_SIZE                            = tostring(var.vertex_embedding_batch_size)
+          VERTEX_EMBEDDING_MAX_ATTEMPTS                          = tostring(var.vertex_embedding_max_attempts)
+          VERTEX_EMBEDDING_INITIAL_RETRY_DELAY_SECONDS           = tostring(var.vertex_embedding_initial_retry_delay_seconds)
+          VERTEX_EMBEDDING_MAX_RETRY_DELAY_SECONDS               = tostring(var.vertex_embedding_max_retry_delay_seconds)
+          VERTEX_EMBEDDING_INPUT_COST_PER_MILLION_CHARACTERS_USD = tostring(var.vertex_embedding_input_cost_per_million_characters_usd)
         } : {}
 
         content {

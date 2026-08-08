@@ -28,24 +28,26 @@ Both dependency managers use committed lockfiles. `bootstrap` fails rather than 
 
 ## Common commands
 
-| Command                      | Purpose                                                    |
-| ---------------------------- | ---------------------------------------------------------- |
-| `mise run bootstrap`         | Install all locked JavaScript and Python dependencies.     |
-| `mise run format`            | Format TypeScript, Python, and Terraform workspaces.       |
-| `mise run format:check`      | Verify formatting without changing files.                  |
-| `mise run lint`              | Run ESLint and Ruff.                                       |
-| `mise run typecheck`         | Run TypeScript and Python type checkers.                   |
-| `mise run test`              | Run workspace tests and Terraform validation.              |
-| `mise run check`             | Run every non-mutating quality gate used by CI.            |
-| `mise run test:api-image`    | Build and smoke-test the API container health endpoint.    |
-| `mise run db:migrate`        | Upgrade the configured database to the migration head.     |
-| `mise run db:downgrade`      | Downgrade the configured database to the base.             |
-| `mise run db:schema-probe`   | Migrate and probe the core schema in disposable Postgres.  |
-| `mise run test:admin-auth`   | Test JWT verification and administrator subject mapping.   |
-| `mise run test:providers`    | Test provider adapter contracts and deterministic fakes.   |
-| `mise run providers:example` | Swap fake adapters through provider-neutral orchestration. |
-| `mise run test:vertex`       | Test Vertex generation and its restricted smoke boundary.  |
-| `mise run vertex:smoke`      | Run the explicit, billed live Vertex streaming smoke.      |
+| Command                           | Purpose                                                    |
+| --------------------------------- | ---------------------------------------------------------- |
+| `mise run bootstrap`              | Install all locked JavaScript and Python dependencies.     |
+| `mise run format`                 | Format TypeScript, Python, and Terraform workspaces.       |
+| `mise run format:check`           | Verify formatting without changing files.                  |
+| `mise run lint`                   | Run ESLint and Ruff.                                       |
+| `mise run typecheck`              | Run TypeScript and Python type checkers.                   |
+| `mise run test`                   | Run workspace tests and Terraform validation.              |
+| `mise run check`                  | Run every non-mutating quality gate used by CI.            |
+| `mise run test:api-image`         | Build and smoke-test the API container health endpoint.    |
+| `mise run db:migrate`             | Upgrade the configured database to the migration head.     |
+| `mise run db:downgrade`           | Downgrade the configured database to the base.             |
+| `mise run db:schema-probe`        | Migrate and probe the core schema in disposable Postgres.  |
+| `mise run test:admin-auth`        | Test JWT verification and administrator subject mapping.   |
+| `mise run test:providers`         | Test provider adapter contracts and deterministic fakes.   |
+| `mise run providers:example`      | Swap fake adapters through provider-neutral orchestration. |
+| `mise run test:vertex`            | Test Vertex generation and its restricted smoke boundary.  |
+| `mise run vertex:smoke`           | Run the explicit, billed live Vertex streaming smoke.      |
+| `mise run test:vertex-embedding`  | Test batching, retries, tasks, and vector validation.      |
+| `mise run vertex:embedding-smoke` | Run billed embeddings and a rolled-back pgvector probe.    |
 
 ## Database migrations
 
@@ -166,17 +168,53 @@ The probe has a fixed support prompt, is absent outside development, and logs
 only safe provider/model/location, token, cost-estimate, and normalized status
 metadata. It is not the public chat endpoint.
 
+## Verify Vertex embeddings
+
+One immutable configuration supplies `text-embedding-005` and dimension `768`
+to both API query embeddings and worker document embeddings. The adapter sends
+the corresponding `RETRIEVAL_QUERY` or `RETRIEVAL_DOCUMENT` task type, batches at
+the configured online-request limit, disables silent truncation, retries only
+transient idempotent batch failures, and rejects any returned dimension other
+than the configured dimension. Source versions record the provider, model, and
+dimension in their metadata before vectors are indexed.
+
+Run the credential-free suite with `mise run test:vertex-embedding`. For the
+explicit billed proof, authenticate Application Default Credentials and set the
+non-secret values shown below. The command starts disposable pgvector Postgres,
+migrates it, calls Vertex once for a document and once for a query, stores the
+document vector, verifies its stored dimension, rolls the fixture back, and
+removes the database container.
+
+```sh
+export RUN_VERTEX_EMBEDDING_INTEGRATION=1
+export GOOGLE_CLOUD_PROJECT='development-project-id'
+export GOOGLE_CLOUD_LOCATION='europe-west1'
+export VERTEX_EMBEDDING_MODEL='text-embedding-005'
+export VERTEX_EMBEDDING_DIMENSION='768'
+export VERTEX_EMBEDDING_BATCH_SIZE='5'
+export VERTEX_EMBEDDING_MAX_ATTEMPTS='3'
+export VERTEX_EMBEDDING_INITIAL_RETRY_DELAY_SECONDS='0.25'
+export VERTEX_EMBEDDING_MAX_RETRY_DELAY_SECONDS='2'
+export VERTEX_EMBEDDING_INPUT_COST_PER_MILLION_CHARACTERS_USD='0.025'
+mise run vertex:embedding-smoke
+unset RUN_VERTEX_EMBEDDING_INTEGRATION
+```
+
+The reported cost is an estimate based on input characters, matching Vertex’s
+text-embedding billing unit; normalized token counts come from the provider
+response. Neither source text nor query text is logged.
+
 ## Workspace layout
 
-| Path                 | Responsibility                                            |
-| -------------------- | --------------------------------------------------------- |
-| `apps/api`           | FastAPI public and admin API service.                     |
-| `apps/worker`        | Asynchronous ingestion worker.                            |
-| `apps/admin`         | Next.js administration portal.                            |
-| `packages/widget`    | Embeddable support-chat web component.                    |
-| `packages/contracts` | Shared request, response, and event contracts.            |
-| `packages/providers` | Provider-neutral Python adapter contracts and test fakes. |
-| `infra/terraform`    | GCP infrastructure definitions.                           |
+| Path                 | Responsibility                                                   |
+| -------------------- | ---------------------------------------------------------------- |
+| `apps/api`           | FastAPI public and admin API service.                            |
+| `apps/worker`        | Asynchronous ingestion worker.                                   |
+| `apps/admin`         | Next.js administration portal.                                   |
+| `packages/widget`    | Embeddable support-chat web component.                           |
+| `packages/contracts` | Shared request, response, and event contracts.                   |
+| `packages/providers` | Provider-neutral contracts, fakes, and isolated Vertex adapters. |
+| `infra/terraform`    | GCP infrastructure definitions.                                  |
 
 The current placeholders reserve these boundaries; product behavior is added by later issues.
 

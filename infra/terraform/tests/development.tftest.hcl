@@ -27,11 +27,11 @@ run "development_plan" {
       contains(local.runtime_project_roles["api"], "roles/cloudsql.client") &&
       contains(local.runtime_project_roles["api"], "roles/cloudsql.instanceUser") &&
       contains(local.runtime_project_roles["api"], "roles/aiplatform.user") &&
+      contains(local.runtime_project_roles["worker"], "roles/aiplatform.user") &&
       !contains(local.runtime_project_roles["admin"], "roles/aiplatform.user") &&
-      !contains(local.runtime_project_roles["migration"], "roles/aiplatform.user") &&
-      !contains(local.runtime_project_roles["worker"], "roles/aiplatform.user")
+      !contains(local.runtime_project_roles["migration"], "roles/aiplatform.user")
     )
-    error_message = "The API must use its own Cloud SQL identity and be the only runtime allowed to invoke Vertex generation."
+    error_message = "Only the API and worker runtimes may invoke Vertex; the API retains its isolated Cloud SQL identity."
   }
 
   assert {
@@ -75,6 +75,29 @@ run "development_plan" {
       ])
     )
     error_message = "The API must receive non-secret Cloud SQL and explicit Vertex routing and pricing configuration."
+  }
+
+  assert {
+    condition = alltrue([
+      for service in ["api", "worker"] : alltrue([
+        for name, value in {
+          GOOGLE_CLOUD_PROJECT                                   = "rag-dev-example"
+          GOOGLE_CLOUD_LOCATION                                  = "europe-west1"
+          VERTEX_EMBEDDING_MODEL                                 = "text-embedding-005"
+          VERTEX_EMBEDDING_DIMENSION                             = "768"
+          VERTEX_EMBEDDING_BATCH_SIZE                            = "5"
+          VERTEX_EMBEDDING_MAX_ATTEMPTS                          = "3"
+          VERTEX_EMBEDDING_INITIAL_RETRY_DELAY_SECONDS           = "0.25"
+          VERTEX_EMBEDDING_MAX_RETRY_DELAY_SECONDS               = "2"
+          VERTEX_EMBEDDING_INPUT_COST_PER_MILLION_CHARACTERS_USD = "0.025"
+          } : one([
+            for environment in google_cloud_run_v2_service.runtime[service].template[0].containers[0].env :
+            environment.value == value
+            if environment.name == name
+        ])
+      ])
+    ])
+    error_message = "API and worker must receive one identical non-secret Vertex embedding configuration."
   }
 
   assert {

@@ -6,6 +6,15 @@ vertex_generation_model = "gemini-2.5-flash-lite"
 vertex_generation_input_cost_per_million_tokens_usd  = 0.10
 vertex_generation_output_cost_per_million_tokens_usd = 0.40
 
+# Document and query vectors must always use this same model and dimension.
+vertex_embedding_model                                  = "text-embedding-005"
+vertex_embedding_dimension                              = 768
+vertex_embedding_batch_size                             = 5
+vertex_embedding_max_attempts                           = 3
+vertex_embedding_initial_retry_delay_seconds            = 0.25
+vertex_embedding_max_retry_delay_seconds                = 2
+vertex_embedding_input_cost_per_million_characters_usd = 0.025
+
 # Immutable GitHub IDs protect workload federation from repository/owner renames.
 github_repository          = "OWNER/REPOSITORY"
 github_repository_id       = "NUMERIC_REPOSITORY_ID"

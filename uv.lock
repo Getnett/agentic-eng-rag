@@ -1119,6 +1119,12 @@ provides-extras = ["api", "migrations"]
 name = "rag-support-worker"
 version = "0.0.0"
 source = { virtual = "apps/worker" }
+dependencies = [
+    { name = "rag-provider-adapters" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "rag-provider-adapters", editable = "packages/providers" }]
 
 [[package]]
 name = "rag-support-workspace"

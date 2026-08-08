@@ -7,6 +7,7 @@ import json
 
 from rag_providers import (
     EmbeddingRequest,
+    EmbeddingTask,
     FakeEmbeddingAdapter,
     FakeGenerationAdapter,
     GenerationRequest,
@@ -27,6 +28,7 @@ async def run_once(runtime: ProviderOrchestrator) -> dict[str, object]:
         EmbeddingRequest(
             texts=("Reset the device from Settings.",),
             budget=RequestBudget(2, 20),
+            task=EmbeddingTask.RETRIEVAL_DOCUMENT,
         )
     )
     return {

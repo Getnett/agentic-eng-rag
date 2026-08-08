@@ -63,6 +63,7 @@ locals {
       "roles/monitoring.metricWriter",
     ])
     worker = toset([
+      "roles/aiplatform.user",
       "roles/cloudsql.client",
       "roles/logging.logWriter",
       "roles/monitoring.metricWriter",

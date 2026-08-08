@@ -535,6 +535,53 @@ async def test_embedding_dimension_and_json_object_constraints(
 
 
 @pytest.mark.anyio
+async def test_source_version_records_one_immutable_embedding_profile(
+    async_engine: AsyncEngine,
+) -> None:
+    session_factory = async_sessionmaker(async_engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        repository = SourceRepository(session)
+        document = await repository.create_document(
+            source_type=SourceType.MARKDOWN,
+            source_location="upload://fixtures/embedding-profile.md",
+            title="Embedding profile fixture",
+        )
+        version = await repository.create_version(
+            document_id=document.id,
+            version_number=1,
+            metadata={"language": "en"},
+        )
+        recorded = await repository.record_embedding_profile(
+            version_id=version.id,
+            provider_id="vertex-ai",
+            model_id="text-embedding-005",
+            dimension=768,
+        )
+        assert recorded.metadata_json == {
+            "language": "en",
+            "embedding": {
+                "provider_id": "vertex-ai",
+                "model_id": "text-embedding-005",
+                "dimension": 768,
+            },
+        }
+        await repository.record_embedding_profile(
+            version_id=version.id,
+            provider_id="vertex-ai",
+            model_id="text-embedding-005",
+            dimension=768,
+        )
+
+        with pytest.raises(ValueError, match="immutable"):
+            await repository.record_embedding_profile(
+                version_id=version.id,
+                provider_id="vertex-ai",
+                model_id="different-model",
+                dimension=768,
+            )
+
+
+@pytest.mark.anyio
 async def test_cascades_preserve_trace_but_remove_deleted_chunk_links(
     async_engine: AsyncEngine,
 ) -> None:

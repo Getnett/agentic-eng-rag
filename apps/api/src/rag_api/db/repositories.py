@@ -220,6 +220,36 @@ class SourceRepository:
         await self._session.flush()
         return records
 
+    async def record_embedding_profile(
+        self,
+        *,
+        version_id: uuid.UUID,
+        provider_id: str,
+        model_id: str,
+        dimension: int,
+    ) -> SourceVersion:
+        """Persist the immutable embedding identity used by one source version."""
+        if not provider_id.strip() or not model_id.strip():
+            raise ValueError("Embedding provider and model IDs must not be blank.")
+        if dimension <= 0:
+            raise ValueError("Embedding dimension must be greater than zero.")
+        version = await self._session.scalar(
+            select(SourceVersion).where(SourceVersion.id == version_id).with_for_update()
+        )
+        if version is None:
+            raise RepositoryEntityNotFound(f"Source version {version_id} was not found.")
+        profile: dict[str, object] = {
+            "provider_id": provider_id,
+            "model_id": model_id,
+            "dimension": dimension,
+        }
+        existing = version.metadata_json.get("embedding")
+        if existing is not None and existing != profile:
+            raise ValueError("Source version embedding profile is immutable once recorded.")
+        version.metadata_json = {**version.metadata_json, "embedding": profile}
+        await self._session.flush()
+        return version
+
     async def transition_version(
         self,
         version_id: uuid.UUID,
