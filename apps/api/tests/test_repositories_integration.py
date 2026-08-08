@@ -642,6 +642,48 @@ async def test_embedded_chunks_require_a_recorded_embedding_profile(
 
 
 @pytest.mark.anyio
+async def test_embedding_profile_metadata_is_reserved_and_fully_validated(
+    async_engine: AsyncEngine,
+) -> None:
+    session_factory = async_sessionmaker(async_engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        repository = SourceRepository(session)
+        document = await repository.create_document(
+            source_type=SourceType.TXT,
+            source_location="upload://fixtures/reserved-embedding-profile.txt",
+            title="Reserved embedding profile fixture",
+        )
+        with pytest.raises(ValueError, match="reserved"):
+            await repository.create_version(
+                document_id=document.id,
+                version_number=1,
+                metadata={"embedding": {"dimension": 3}},
+            )
+
+        version = await repository.create_version(
+            document_id=document.id,
+            version_number=1,
+        )
+        version.metadata_json = {"embedding": {"dimension": 3}}
+        await session.flush()
+
+        with pytest.raises(ValueError, match="provider and model"):
+            await repository.add_chunks(
+                version_id=version.id,
+                chunks=(
+                    ChunkCreate(
+                        text="A vector with an incomplete profile",
+                        token_count=6,
+                        embedding=(0.1, 0.2, 0.3),
+                        embedding_dimension=3,
+                    ),
+                ),
+            )
+        chunk_count = await session.scalar(select(func.count()).select_from(Chunk))
+        assert chunk_count == 0
+
+
+@pytest.mark.anyio
 async def test_cascades_preserve_trace_but_remove_deleted_chunk_links(
     async_engine: AsyncEngine,
 ) -> None:

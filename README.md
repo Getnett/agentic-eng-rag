@@ -174,8 +174,8 @@ One immutable configuration supplies `text-embedding-005` and dimension `768`
 to both API query embeddings and worker document embeddings. The adapter sends
 the corresponding `RETRIEVAL_QUERY` or `RETRIEVAL_DOCUMENT` task type, batches at
 the configured online-request limit, disables silent truncation, retries only
-recognized transient idempotent batch failures, and rejects over-budget input
-before any billed batch. Source versions record the provider, model, and
+recognized transient idempotent batch failures with bounded full jitter, and
+rejects over-budget input before any billed batch. Source versions record the provider, model, and
 dimension in their metadata; chunk insertion requires that profile before
 accepting embeddings and enforces its recorded dimension before vectors are
 indexed.

@@ -250,13 +250,18 @@ async def test_retries_only_retryable_batch_failures_with_bounded_backoff() -> N
             types.EmbedContentResponse(embeddings=[embedding([0.1, 0.2, 0.3])]),
         ]
     )
-    adapter = VertexEmbeddingAdapter(config(), embed_content=factory, sleep=sleep)
+    adapter = VertexEmbeddingAdapter(
+        config(),
+        embed_content=factory,
+        sleep=sleep,
+        random_value=lambda: 0.5,
+    )
 
     result = await adapter.embed(request("retry me"))
 
     assert result.dimension == 3
     assert len(factory.calls) == 3
-    assert delays == [0.1, 0.2]
+    assert delays == [0.05, 0.1]
 
 
 @pytest.mark.anyio

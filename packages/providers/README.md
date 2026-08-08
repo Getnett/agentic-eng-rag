@@ -67,7 +67,7 @@ never prompt text, credentials, authorization data, or raw SDK error details.
 document and query requests while sending their distinct retrieval task types.
 It splits online requests at the configured batch size, disables truncation,
 rejects a conservative UTF-8 token upper bound before billed calls, uses bounded
-exponential backoff only for recognized transient failures, validates every
+exponential backoff with full jitter only for recognized transient failures, validates every
 response vector, and returns provider-normalized token and cost metadata.
 
 ```sh

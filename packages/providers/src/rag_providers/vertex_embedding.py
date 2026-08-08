@@ -9,6 +9,7 @@ import os
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+from random import random as random_unit_interval
 from typing import Protocol, TypedDict
 
 import httpx
@@ -188,10 +189,12 @@ class VertexEmbeddingAdapter:
         *,
         embed_content: VertexEmbedContent | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        random_value: Callable[[], float] = random_unit_interval,
         close_callback: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self._config = config
         self._sleep = sleep
+        self._random_value = random_value
         self._embed_content: VertexEmbedContent
         self._close_callback: Callable[[], Awaitable[None]] | None
         if embed_content is None:
@@ -363,9 +366,15 @@ class VertexEmbeddingAdapter:
                         ),
                     )
                     raise mapped_error from None
-                await self._sleep(delay)
+                await self._sleep(self._jittered_delay(delay))
                 delay = min(delay * 2, self._config.max_retry_delay_seconds)
         raise AssertionError("Embedding retry loop exhausted without returning or raising.")
+
+    def _jittered_delay(self, upper_bound: float) -> float:
+        random_value = self._random_value()
+        if not math.isfinite(random_value) or not 0 <= random_value <= 1:
+            raise ValueError("Retry jitter source must return a value between zero and one.")
+        return upper_bound * random_value
 
     def _normalize_response(
         self,

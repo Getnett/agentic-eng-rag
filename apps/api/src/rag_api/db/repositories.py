@@ -176,13 +176,18 @@ class SourceRepository:
         raw_object_key: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> SourceVersion:
+        version_metadata = dict(metadata or {})
+        if "embedding" in version_metadata:
+            raise ValueError(
+                "Embedding metadata is reserved; use record_embedding_profile after creation."
+            )
         version = SourceVersion(
             document_id=document_id,
             version_number=version_number,
             status=SourceVersionStatus.QUEUED,
             content_hash=content_hash,
             raw_object_key=raw_object_key,
-            metadata_json=dict(metadata or {}),
+            metadata_json=version_metadata,
         )
         self._session.add(version)
         await self._session.flush()
@@ -207,6 +212,17 @@ class SourceRepository:
         if embedding_profile is not None:
             if not isinstance(embedding_profile, dict):
                 raise ValueError("Source version embedding metadata must be an object.")
+            provider_id = embedding_profile.get("provider_id")
+            model_id = embedding_profile.get("model_id")
+            if (
+                not isinstance(provider_id, str)
+                or not provider_id.strip()
+                or not isinstance(model_id, str)
+                or not model_id.strip()
+            ):
+                raise ValueError(
+                    "Source version embedding metadata requires nonblank provider and model IDs."
+                )
             recorded_dimension = embedding_profile.get("dimension")
             if type(recorded_dimension) is not int or recorded_dimension <= 0:
                 raise ValueError(
