@@ -106,6 +106,12 @@ async def create_complete_chain(session: AsyncSession, suffix: str) -> Chain:
         raw_object_key=f"sources/{document.id}/1.md",
         metadata={"language": "en"},
     )
+    await source_repository.record_embedding_profile(
+        version_id=version.id,
+        provider_id="test-provider",
+        model_id="test-embedding",
+        dimension=3,
+    )
     parent_id = uuid.uuid4()
     child_id = uuid.uuid4()
     chunks = await source_repository.add_chunks(
@@ -504,6 +510,12 @@ async def test_embedding_dimension_and_json_object_constraints(
             version_number=1,
             content_hash="embedding",
         )
+        await repository.record_embedding_profile(
+            version_id=version.id,
+            provider_id="test-provider",
+            model_id="invalid-dimension-fixture",
+            dimension=2,
+        )
 
     async with session_factory() as session:
         with pytest.raises(IntegrityError):
@@ -594,6 +606,39 @@ async def test_source_version_records_one_immutable_embedding_profile(
                 model_id="different-model",
                 dimension=768,
             )
+
+
+@pytest.mark.anyio
+async def test_embedded_chunks_require_a_recorded_embedding_profile(
+    async_engine: AsyncEngine,
+) -> None:
+    session_factory = async_sessionmaker(async_engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        repository = SourceRepository(session)
+        document = await repository.create_document(
+            source_type=SourceType.TXT,
+            source_location="upload://fixtures/missing-embedding-profile.txt",
+            title="Missing embedding profile fixture",
+        )
+        version = await repository.create_version(
+            document_id=document.id,
+            version_number=1,
+        )
+
+        with pytest.raises(ValueError, match="must be recorded"):
+            await repository.add_chunks(
+                version_id=version.id,
+                chunks=(
+                    ChunkCreate(
+                        text="A vector without a recorded source profile",
+                        token_count=7,
+                        embedding=(0.1, 0.2, 0.3),
+                        embedding_dimension=3,
+                    ),
+                ),
+            )
+        chunk_count = await session.scalar(select(func.count()).select_from(Chunk))
+        assert chunk_count == 0
 
 
 @pytest.mark.anyio

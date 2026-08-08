@@ -176,8 +176,9 @@ the corresponding `RETRIEVAL_QUERY` or `RETRIEVAL_DOCUMENT` task type, batches a
 the configured online-request limit, disables silent truncation, retries only
 recognized transient idempotent batch failures, and rejects over-budget input
 before any billed batch. Source versions record the provider, model, and
-dimension in their metadata, and chunk insertion enforces that recorded
-dimension before vectors are indexed.
+dimension in their metadata; chunk insertion requires that profile before
+accepting embeddings and enforces its recorded dimension before vectors are
+indexed.
 
 Run the credential-free suite with `mise run test:vertex-embedding`. For the
 explicit billed proof, authenticate Application Default Credentials and set the
