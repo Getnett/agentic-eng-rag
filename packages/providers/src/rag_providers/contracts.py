@@ -19,6 +19,13 @@ class ProviderRole(StrEnum):
     RERANK = "rerank"
 
 
+class EmbeddingTask(StrEnum):
+    """Semantic purpose passed to embedding providers."""
+
+    RETRIEVAL_DOCUMENT = "retrieval_document"
+    RETRIEVAL_QUERY = "retrieval_query"
+
+
 class ProviderErrorCode(StrEnum):
     """Provider-neutral failure categories exposed to orchestration."""
 
@@ -175,6 +182,7 @@ class GenerationResult:
 class EmbeddingRequest:
     texts: tuple[str, ...]
     budget: RequestBudget
+    task: EmbeddingTask = EmbeddingTask.RETRIEVAL_DOCUMENT
 
     def __post_init__(self) -> None:
         if not self.texts:

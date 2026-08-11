@@ -22,7 +22,8 @@ managed here.
 - separate keyless GitHub image-publisher and development-deployer service
   accounts;
 - narrowly scoped project IAM bindings for runtime logging, monitoring, Cloud
-  SQL, and Vertex invocation for the API identity only, plus resource-scoped
+  SQL, generation through the API, and embeddings through the API and worker,
+  plus resource-scoped
   Storage, Secret Manager, and Cloud Tasks access; and
 - required Google APIs.
 
@@ -131,12 +132,14 @@ Manual verification:
    the API and migration runtime identities.
 9. Re-run `plan`; expect no changes.
 
-The API receives `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`,
-`VERTEX_GENERATION_MODEL`, and explicit input/output per-million-token USD
-estimates as non-secret environment values. Its dedicated service account alone
-receives `roles/aiplatform.user`; no provider API key or static service-account key
-is used. Change the model and both matching price variables together in
-`dev.tfvars` because model availability, lifecycle, and pricing vary.
+The API receives generation model and explicit per-million-token price values.
+The API and worker receive the identical embedding model, dimension, batch,
+retry, and per-million-character price configuration. Both dedicated identities
+receive `roles/aiplatform.user`; admin and migration do not. No provider API key
+or static service-account key is used. Change a model and its matching price
+variables together in `dev.tfvars` because availability, lifecycle, and pricing
+vary. An embedding model or dimension change requires the later re-index workflow
+before production promotion.
 
 ## 4. Build and configure the migration job
 

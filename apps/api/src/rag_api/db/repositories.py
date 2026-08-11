@@ -176,13 +176,18 @@ class SourceRepository:
         raw_object_key: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> SourceVersion:
+        version_metadata = dict(metadata or {})
+        if "embedding" in version_metadata:
+            raise ValueError(
+                "Embedding metadata is reserved; use record_embedding_profile after creation."
+            )
         version = SourceVersion(
             document_id=document_id,
             version_number=version_number,
             status=SourceVersionStatus.QUEUED,
             content_hash=content_hash,
             raw_object_key=raw_object_key,
-            metadata_json=dict(metadata or {}),
+            metadata_json=version_metadata,
         )
         self._session.add(version)
         await self._session.flush()
@@ -197,6 +202,39 @@ class SourceRepository:
         version = await self._session.get(SourceVersion, version_id)
         if version is None:
             raise RepositoryEntityNotFound(f"Source version {version_id} was not found.")
+
+        has_embeddings = any(chunk.embedding is not None for chunk in chunks)
+        embedding_profile = version.metadata_json.get("embedding")
+        if has_embeddings and embedding_profile is None:
+            raise ValueError(
+                "Source version embedding profile must be recorded before adding embedded chunks."
+            )
+        if embedding_profile is not None:
+            if not isinstance(embedding_profile, dict):
+                raise ValueError("Source version embedding metadata must be an object.")
+            provider_id = embedding_profile.get("provider_id")
+            model_id = embedding_profile.get("model_id")
+            if (
+                not isinstance(provider_id, str)
+                or not provider_id.strip()
+                or not isinstance(model_id, str)
+                or not model_id.strip()
+            ):
+                raise ValueError(
+                    "Source version embedding metadata requires nonblank provider and model IDs."
+                )
+            recorded_dimension = embedding_profile.get("dimension")
+            if type(recorded_dimension) is not int or recorded_dimension <= 0:
+                raise ValueError(
+                    "Source version embedding metadata requires a positive integer dimension."
+                )
+            if any(
+                chunk.embedding is not None and chunk.embedding_dimension != recorded_dimension
+                for chunk in chunks
+            ):
+                raise ValueError(
+                    "Chunk embedding dimension must match the source version embedding profile."
+                )
 
         records = [
             Chunk(
@@ -219,6 +257,36 @@ class SourceRepository:
         self._session.add_all(records)
         await self._session.flush()
         return records
+
+    async def record_embedding_profile(
+        self,
+        *,
+        version_id: uuid.UUID,
+        provider_id: str,
+        model_id: str,
+        dimension: int,
+    ) -> SourceVersion:
+        """Persist the immutable embedding identity used by one source version."""
+        if not provider_id.strip() or not model_id.strip():
+            raise ValueError("Embedding provider and model IDs must not be blank.")
+        if dimension <= 0:
+            raise ValueError("Embedding dimension must be greater than zero.")
+        version = await self._session.scalar(
+            select(SourceVersion).where(SourceVersion.id == version_id).with_for_update()
+        )
+        if version is None:
+            raise RepositoryEntityNotFound(f"Source version {version_id} was not found.")
+        profile: dict[str, object] = {
+            "provider_id": provider_id,
+            "model_id": model_id,
+            "dimension": dimension,
+        }
+        existing = version.metadata_json.get("embedding")
+        if existing is not None and existing != profile:
+            raise ValueError("Source version embedding profile is immutable once recorded.")
+        version.metadata_json = {**version.metadata_json, "embedding": profile}
+        await self._session.flush()
+        return version
 
     async def transition_version(
         self,

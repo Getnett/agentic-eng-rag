@@ -106,6 +106,12 @@ async def create_complete_chain(session: AsyncSession, suffix: str) -> Chain:
         raw_object_key=f"sources/{document.id}/1.md",
         metadata={"language": "en"},
     )
+    await source_repository.record_embedding_profile(
+        version_id=version.id,
+        provider_id="test-provider",
+        model_id="test-embedding",
+        dimension=3,
+    )
     parent_id = uuid.uuid4()
     child_id = uuid.uuid4()
     chunks = await source_repository.add_chunks(
@@ -504,6 +510,12 @@ async def test_embedding_dimension_and_json_object_constraints(
             version_number=1,
             content_hash="embedding",
         )
+        await repository.record_embedding_profile(
+            version_id=version.id,
+            provider_id="test-provider",
+            model_id="invalid-dimension-fixture",
+            dimension=2,
+        )
 
     async with session_factory() as session:
         with pytest.raises(IntegrityError):
@@ -532,6 +544,143 @@ async def test_embedding_dimension_and_json_object_constraints(
             )
             await session.flush()
         await session.rollback()
+
+
+@pytest.mark.anyio
+async def test_source_version_records_one_immutable_embedding_profile(
+    async_engine: AsyncEngine,
+) -> None:
+    session_factory = async_sessionmaker(async_engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        repository = SourceRepository(session)
+        document = await repository.create_document(
+            source_type=SourceType.MARKDOWN,
+            source_location="upload://fixtures/embedding-profile.md",
+            title="Embedding profile fixture",
+        )
+        version = await repository.create_version(
+            document_id=document.id,
+            version_number=1,
+            metadata={"language": "en"},
+        )
+        recorded = await repository.record_embedding_profile(
+            version_id=version.id,
+            provider_id="vertex-ai",
+            model_id="text-embedding-005",
+            dimension=768,
+        )
+        assert recorded.metadata_json == {
+            "language": "en",
+            "embedding": {
+                "provider_id": "vertex-ai",
+                "model_id": "text-embedding-005",
+                "dimension": 768,
+            },
+        }
+        await repository.record_embedding_profile(
+            version_id=version.id,
+            provider_id="vertex-ai",
+            model_id="text-embedding-005",
+            dimension=768,
+        )
+
+        with pytest.raises(ValueError, match="must match"):
+            await repository.add_chunks(
+                version_id=version.id,
+                chunks=(
+                    ChunkCreate(
+                        text="Internally valid but profile-incompatible vector",
+                        token_count=6,
+                        embedding=(0.1, 0.2, 0.3),
+                        embedding_dimension=3,
+                    ),
+                ),
+            )
+        chunk_count = await session.scalar(select(func.count()).select_from(Chunk))
+        assert chunk_count == 0
+
+        with pytest.raises(ValueError, match="immutable"):
+            await repository.record_embedding_profile(
+                version_id=version.id,
+                provider_id="vertex-ai",
+                model_id="different-model",
+                dimension=768,
+            )
+
+
+@pytest.mark.anyio
+async def test_embedded_chunks_require_a_recorded_embedding_profile(
+    async_engine: AsyncEngine,
+) -> None:
+    session_factory = async_sessionmaker(async_engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        repository = SourceRepository(session)
+        document = await repository.create_document(
+            source_type=SourceType.TXT,
+            source_location="upload://fixtures/missing-embedding-profile.txt",
+            title="Missing embedding profile fixture",
+        )
+        version = await repository.create_version(
+            document_id=document.id,
+            version_number=1,
+        )
+
+        with pytest.raises(ValueError, match="must be recorded"):
+            await repository.add_chunks(
+                version_id=version.id,
+                chunks=(
+                    ChunkCreate(
+                        text="A vector without a recorded source profile",
+                        token_count=7,
+                        embedding=(0.1, 0.2, 0.3),
+                        embedding_dimension=3,
+                    ),
+                ),
+            )
+        chunk_count = await session.scalar(select(func.count()).select_from(Chunk))
+        assert chunk_count == 0
+
+
+@pytest.mark.anyio
+async def test_embedding_profile_metadata_is_reserved_and_fully_validated(
+    async_engine: AsyncEngine,
+) -> None:
+    session_factory = async_sessionmaker(async_engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        repository = SourceRepository(session)
+        document = await repository.create_document(
+            source_type=SourceType.TXT,
+            source_location="upload://fixtures/reserved-embedding-profile.txt",
+            title="Reserved embedding profile fixture",
+        )
+        with pytest.raises(ValueError, match="reserved"):
+            await repository.create_version(
+                document_id=document.id,
+                version_number=1,
+                metadata={"embedding": {"dimension": 3}},
+            )
+
+        version = await repository.create_version(
+            document_id=document.id,
+            version_number=1,
+        )
+        version.metadata_json = {"embedding": {"dimension": 3}}
+        await session.flush()
+
+        with pytest.raises(ValueError, match="provider and model"):
+            await repository.add_chunks(
+                version_id=version.id,
+                chunks=(
+                    ChunkCreate(
+                        text="A vector with an incomplete profile",
+                        token_count=6,
+                        embedding=(0.1, 0.2, 0.3),
+                        embedding_dimension=3,
+                    ),
+                ),
+            )
+        chunk_count = await session.scalar(select(func.count()).select_from(Chunk))
+        assert chunk_count == 0
 
 
 @pytest.mark.anyio

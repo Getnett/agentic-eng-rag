@@ -4,6 +4,7 @@ from rag_providers.contracts import (
     EmbeddingAdapter,
     EmbeddingRequest,
     EmbeddingResult,
+    EmbeddingTask,
     GenerationAdapter,
     GenerationComplete,
     GenerationDelta,
@@ -30,11 +31,16 @@ from rag_providers.vertex import (
     VertexGenerationAdapter,
     VertexGenerationConfig,
 )
+from rag_providers.vertex_embedding import (
+    VertexEmbeddingAdapter,
+    VertexEmbeddingConfig,
+)
 
 __all__ = [
     "EmbeddingAdapter",
     "EmbeddingRequest",
     "EmbeddingResult",
+    "EmbeddingTask",
     "FakeEmbeddingAdapter",
     "FakeGenerationAdapter",
     "GenerationAdapter",
@@ -59,4 +65,6 @@ __all__ = [
     "TokenUsage",
     "VertexGenerationAdapter",
     "VertexGenerationConfig",
+    "VertexEmbeddingAdapter",
+    "VertexEmbeddingConfig",
 ]

@@ -91,6 +91,12 @@ async def run_probe() -> dict[str, object]:
                     raw_object_key="probe/source.md",
                     metadata={"probe": True},
                 )
+                await source_repository.record_embedding_profile(
+                    version_id=version.id,
+                    provider_id="schema-probe",
+                    model_id="deterministic-fixture",
+                    dimension=3,
+                )
                 chunks = await source_repository.add_chunks(
                     version_id=version.id,
                     chunks=(

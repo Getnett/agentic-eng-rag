@@ -50,6 +50,86 @@ variable "vertex_generation_output_cost_per_million_tokens_usd" {
   }
 }
 
+variable "vertex_embedding_model" {
+  description = "Vertex text-embedding model ID shared by document and query embeddings."
+  type        = string
+  default     = "text-embedding-005"
+
+  validation {
+    condition = (
+      length(trimspace(var.vertex_embedding_model)) > 0 &&
+      !strcontains(var.vertex_embedding_model, " ")
+    )
+    error_message = "vertex_embedding_model must be a nonblank model ID without spaces."
+  }
+}
+
+variable "vertex_embedding_dimension" {
+  description = "Vector dimension shared by document, query, and pgvector persistence."
+  type        = number
+  default     = 768
+
+  validation {
+    condition     = var.vertex_embedding_dimension > 0 && floor(var.vertex_embedding_dimension) == var.vertex_embedding_dimension
+    error_message = "vertex_embedding_dimension must be a positive integer."
+  }
+}
+
+variable "vertex_embedding_batch_size" {
+  description = "Maximum texts sent in one online Vertex embedding request."
+  type        = number
+  default     = 5
+
+  validation {
+    condition     = var.vertex_embedding_batch_size >= 1 && var.vertex_embedding_batch_size <= 5 && floor(var.vertex_embedding_batch_size) == var.vertex_embedding_batch_size
+    error_message = "vertex_embedding_batch_size must be an integer between 1 and Vertex's online limit of 5."
+  }
+}
+
+variable "vertex_embedding_max_attempts" {
+  description = "Maximum attempts for one idempotent embedding batch, including the initial call."
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.vertex_embedding_max_attempts > 0 && floor(var.vertex_embedding_max_attempts) == var.vertex_embedding_max_attempts
+    error_message = "vertex_embedding_max_attempts must be a positive integer."
+  }
+}
+
+variable "vertex_embedding_initial_retry_delay_seconds" {
+  description = "Initial delay before retrying a transient Vertex embedding failure."
+  type        = number
+  default     = 0.25
+
+  validation {
+    condition     = var.vertex_embedding_initial_retry_delay_seconds >= 0
+    error_message = "vertex_embedding_initial_retry_delay_seconds must be non-negative."
+  }
+}
+
+variable "vertex_embedding_max_retry_delay_seconds" {
+  description = "Maximum delay between transient Vertex embedding retry attempts."
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.vertex_embedding_max_retry_delay_seconds >= var.vertex_embedding_initial_retry_delay_seconds
+    error_message = "vertex_embedding_max_retry_delay_seconds must be at least the initial delay."
+  }
+}
+
+variable "vertex_embedding_input_cost_per_million_characters_usd" {
+  description = "Estimated Vertex embedding input price in USD per million input characters."
+  type        = number
+  default     = 0.025
+
+  validation {
+    condition     = var.vertex_embedding_input_cost_per_million_characters_usd >= 0
+    error_message = "vertex_embedding_input_cost_per_million_characters_usd must be non-negative."
+  }
+}
+
 variable "environment" {
   description = "Environment label. The current Terraform root provisions development only."
   type        = string

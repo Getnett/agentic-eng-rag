@@ -1,7 +1,9 @@
 # Provider adapter contracts
 
 `rag-provider-adapters` is the provider-neutral Python boundary shared by model
-orchestration. It contains no provider SDK and makes no network calls.
+orchestration. Provider SDK imports and network calls remain isolated in the
+Vertex adapter modules; contracts, orchestration, and deterministic fakes do not
+depend on those details.
 
 The package declares generation, embedding, rewrite, and rerank roles. M1 executes
 generation and embedding only; rewrite and rerank remain interface declarations
@@ -58,3 +60,19 @@ unset RUN_VERTEX_INTEGRATION
 The script uses a fixed, non-sensitive support prompt. Logs contain provider,
 model, location, token counts, estimated cost, and normalized error category, but
 never prompt text, credentials, authorization data, or raw SDK error details.
+
+## Vertex embeddings
+
+`VertexEmbeddingAdapter` uses the same configured model and dimension for
+document and query requests while sending their distinct retrieval task types.
+It splits online requests at the configured batch size, disables truncation,
+rejects a conservative UTF-8 token upper bound before billed calls, uses bounded
+exponential backoff with full jitter only for recognized transient failures, validates every
+response vector, and returns provider-normalized token and cost metadata.
+
+```sh
+mise run test:vertex-embedding
+```
+
+The opt-in billed and database-backed verification is documented in the root
+README and runs as `mise run vertex:embedding-smoke`.
